@@ -188,32 +188,34 @@ set(SDL2_INCLUDE_DIRS "${SDL2_ALL_INCLUDES}" CACHE STRING "" FORCE)
 set(SDL2_LIBRARIES "SDL2-static" CACHE STRING "" FORCE)
 
 # ----------------------------------------------------------------------------
-# 3) NFD stub + real libcurl for the online mod store.
-#    Build curl for Android instead of the old inert curl_stub. HTTP(S) uses
-#    Android's system CA bundle through curl/OpenSSL and local SAF mods remain
-#    independent of the network path.
+# 3) NFD stub + Android HTTP-backed libcurl compatibility shim.
+#    RecompFrontend only needs a small libcurl easy-GET subset for the online
+#    mod store. The shim delegates HTTP(S) to HttpURLConnection on Java, which
+#    uses Android's platform TLS/root store, then streams the response through
+#    the normal libcurl write callback. Local SAF mods remain independent.
 # ----------------------------------------------------------------------------
 add_library(nfd STATIC
     "${ANDROID_PORT_DIR}/native/stubs/nfd_stub.c")
 target_include_directories(nfd PUBLIC
     "${RT64_DIR}/src/contrib/nativefiledialog-extended/src/include")
 
-set(BUILD_CURL_EXE OFF CACHE BOOL "" FORCE)
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
-set(CURL_USE_LIBPSL OFF CACHE BOOL "" FORCE)
-set(CURL_USE_LIBSSH2 OFF CACHE BOOL "" FORCE)
-set(CURL_DISABLE_LDAP ON CACHE BOOL "" FORCE)
-set(CURL_DISABLE_LDAPS ON CACHE BOOL "" FORCE)
-set(CURL_ZLIB OFF CACHE BOOL "" FORCE)
-set(HTTP_ONLY ON CACHE BOOL "" FORCE)
-set(CURL_USE_OPENSSL ON CACHE BOOL "" FORCE)
-set(OPENSSL_USE_STATIC_LIBS TRUE)
-include(FetchContent)
-FetchContent_Declare(curl
-    URL https://github.com/curl/curl/releases/download/curl-8_12_1/curl-8.12.1.tar.xz
-)
-FetchContent_MakeAvailable(curl)
+add_library(curl_stub STATIC
+    "${ANDROID_PORT_DIR}/native/stubs/curl_stub.cpp")
+target_include_directories(curl_stub PUBLIC
+    "${ANDROID_PORT_DIR}/native/stubs/include")
+
+# RecompFrontend uses find_package(CURL REQUIRED) and CURL::libcurl. Supply the
+# functional Android compatibility target without requiring an NDK TLS library.
+set(CURL_FAKE_CONFIG_DIR "${CMAKE_BINARY_DIR}/fakecurl")
+file(MAKE_DIRECTORY "${CURL_FAKE_CONFIG_DIR}")
+file(WRITE "${CURL_FAKE_CONFIG_DIR}/CURLConfig.cmake" "
+if(NOT TARGET CURL::libcurl)
+    add_library(CURL::libcurl INTERFACE IMPORTED GLOBAL)
+    set_target_properties(CURL::libcurl PROPERTIES INTERFACE_LINK_LIBRARIES curl_stub)
+endif()
+set(CURL_FOUND TRUE)
+")
+set(CURL_DIR "${CURL_FAKE_CONFIG_DIR}" CACHE PATH "" FORCE)
 
 # ----------------------------------------------------------------------------
 # 4) freetype (para RmlUi) — fonte, com FindFreetype próprio
