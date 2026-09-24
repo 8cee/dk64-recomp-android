@@ -67,7 +67,7 @@ public class MainActivity extends SDLActivity {
     // ------------------------------------------------------------------
     @Override
     public void setOrientationBis(int w, int h, boolean resizable, String hint) {
-        Log.v(TAG, "setOrientation override: forçando SENSOR_LANDSCAPE "
+        Log.v(TAG, "setOrientation override: forcing SENSOR_LANDSCAPE "
                 + "(w=" + w + " h=" + h + " hint=" + hint + ")");
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
     }
@@ -124,7 +124,7 @@ public class MainActivity extends SDLActivity {
             nativeSetRuntimePaths(getFilesDir().getAbsolutePath(),
                     getApplicationInfo().nativeLibraryDir);
         } catch (UnsatisfiedLinkError e) {
-            Log.e(TAG, "nativeSetRuntimePaths indisponível: " + e.getMessage());
+            Log.e(TAG, "nativeSetRuntimePaths unavailable: " + e.getMessage());
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -143,7 +143,7 @@ public class MainActivity extends SDLActivity {
         try {
             nativeBridgeInit();
         } catch (UnsatisfiedLinkError e) {
-            Log.e(TAG, "JNI da ponte de arquivos indisponível: " + e.getMessage());
+            Log.e(TAG, "File-bridge JNI unavailable: " + e.getMessage());
         }
 
         // Registra a JavaVM no módulo de reinício (app_restart.cpp). O JavaVM*
@@ -154,7 +154,7 @@ public class MainActivity extends SDLActivity {
         try {
             nativeRestartInit();
         } catch (UnsatisfiedLinkError e) {
-            Log.e(TAG, "JNI de reinício do app indisponível: " + e.getMessage());
+            Log.e(TAG, "App-restart JNI unavailable: " + e.getMessage());
         }
 
         // Gamepad virtual: overlay transparente por cima do SDLSurface.
@@ -171,7 +171,7 @@ public class MainActivity extends SDLActivity {
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT));
             } catch (UnsatisfiedLinkError e) {
-                Log.e(TAG, "JNI do gamepad virtual indisponível: " + e.getMessage());
+                Log.e(TAG, "Virtual-gamepad JNI unavailable: " + e.getMessage());
                 virtualPadView = null;
             }
         }
@@ -192,14 +192,14 @@ public class MainActivity extends SDLActivity {
                 @Override public void surfaceCreated(SurfaceHolder holder) {
                     Log.i(TAG, "DK64 SurfaceHolder: surfaceCreated");
                     try { nativeSurfaceState(1); } catch (UnsatisfiedLinkError e) {
-                        Log.e(TAG, "nativeSurfaceState(1) indisponível: " + e.getMessage());
+                        Log.e(TAG, "nativeSurfaceState(1) unavailable: " + e.getMessage());
                     }
                     // surfaceCreated chega DEPOIS de onResume no ciclo de
                     // retorno do DocumentsUI: é o momento DETERMINÍSTICO de
                     // surface válida, então liberamos o gate de Activity aqui
                     // (substitui a antiga liberação em onWindowFocusChanged).
                     try { nativeSetAppActive(true); } catch (UnsatisfiedLinkError e) {
-                        Log.e(TAG, "nativeSetAppActive(true) indisponível: " + e.getMessage());
+                        Log.e(TAG, "nativeSetAppActive(true) unavailable: " + e.getMessage());
                     }
                 }
                 @Override public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
@@ -211,7 +211,7 @@ public class MainActivity extends SDLActivity {
                     // trocada silenciosamente pelo SurfaceView BLAST).
                     Log.i(TAG, "DK64 SurfaceHolder: surfaceChanged " + width + "x" + height);
                     try { nativeSurfaceState(2); } catch (UnsatisfiedLinkError e) {
-                        Log.e(TAG, "nativeSurfaceState(2) indisponível: " + e.getMessage());
+                        Log.e(TAG, "nativeSurfaceState(2) unavailable: " + e.getMessage());
                     }
                 }
                 @Override public void surfaceDestroyed(SurfaceHolder holder) {
@@ -222,7 +222,7 @@ public class MainActivity extends SDLActivity {
                     // já tiver sido liberado por uma flutuação de foco.
                     Log.i(TAG, "DK64 SurfaceHolder: surfaceDestroyed");
                     try { nativeSurfaceState(0); } catch (UnsatisfiedLinkError e) {
-                        Log.e(TAG, "nativeSurfaceState(0) indisponível: " + e.getMessage());
+                        Log.e(TAG, "nativeSurfaceState(0) unavailable: " + e.getMessage());
                     }
                 }
             };
@@ -255,7 +255,7 @@ public class MainActivity extends SDLActivity {
                 try {
                     nativeOnFilePicked(KIND_MODS_FOLDER, true, "Mods folder opened.");
                 } catch (UnsatisfiedLinkError e) {
-                    Log.e(TAG, "nativeOnFilePicked indisponível: " + e.getMessage());
+                    Log.e(TAG, "nativeOnFilePicked unavailable: " + e.getMessage());
                 }
                 return;
             }
@@ -347,7 +347,7 @@ public class MainActivity extends SDLActivity {
                     }
                 }
             } catch (Throwable t) {
-                Log.e(TAG, "Falha ao processar arquivo escolhido", t);
+                Log.e(TAG, "Failed to process selected file", t);
                 payload = "Failed to process the selected file: " + t.getMessage();
             }
 
@@ -356,7 +356,7 @@ public class MainActivity extends SDLActivity {
             try {
                 nativeOnFilePicked(kind, fOk, fPayload);
             } catch (UnsatisfiedLinkError e) {
-                Log.e(TAG, "nativeOnFilePicked indisponível: " + e.getMessage());
+                Log.e(TAG, "nativeOnFilePicked unavailable: " + e.getMessage());
             }
         }, "dk64-saf-result").start();
     }
@@ -375,7 +375,7 @@ public class MainActivity extends SDLActivity {
     public static boolean requestFilePicker(int kind) {
         final Activity activity = mSingleton;
         if (activity == null || activity.isFinishing()) {
-            Log.e(TAG, "requestFilePicker: Activity indisponível");
+            Log.e(TAG, "requestFilePicker: Activity unavailable");
             return false;
         }
         activity.runOnUiThread(() -> {
@@ -426,13 +426,13 @@ public class MainActivity extends SDLActivity {
                 }
                 activity.startActivityForResult(intent, requestCode);
             } catch (Exception e) {
-                Log.e(TAG, "Falha ao abrir o seletor SAF", e);
+                Log.e(TAG, "Failed to open SAF picker", e);
                 // Libera o slot no nativo e mostra o erro no menu do jogo.
                 try {
                     nativeOnFilePicked(kind, false,
                             "Could not open the Android file manager: " + e.getMessage());
                 } catch (UnsatisfiedLinkError ule) {
-                    Log.e(TAG, "nativeOnFilePicked indisponível: " + ule.getMessage());
+                    Log.e(TAG, "nativeOnFilePicked unavailable: " + ule.getMessage());
                 }
             }
         });
@@ -499,11 +499,11 @@ public class MainActivity extends SDLActivity {
     public void onPause() {
         // ANTES do super (que sinaliza a pausa do SDL): congela a present
         // thread o quanto antes — surfaceDestroyed chega logo depois.
-        DiagnosticsLogger.mark("onPause — app perdendo primeiro plano");
+        DiagnosticsLogger.mark("onPause — app leaving foreground");
         try {
             nativeSetAppActive(false);
         } catch (UnsatisfiedLinkError e) {
-            Log.e(TAG, "nativeSetAppActive(false) indisponível: " + e.getMessage());
+            Log.e(TAG, "nativeSetAppActive(false) unavailable: " + e.getMessage());
         }
         super.onPause();
     }
@@ -511,14 +511,14 @@ public class MainActivity extends SDLActivity {
     @Override
     public void onResume() {
         super.onResume();
-        DiagnosticsLogger.mark("onResume — app de volta ao primeiro plano");
+        DiagnosticsLogger.mark("onResume — app returned to foreground");
         // O SDL pode retomar com um SDL_AudioDeviceID ainda válido, mas com a
         // stream AAudio/OpenSL subjacente morta. Não tocamos no device na UI
         // thread: apenas marcamos; o callback de áudio reabre com mutex.
         try {
             nativeRequestAudioResume();
         } catch (UnsatisfiedLinkError e) {
-            Log.e(TAG, "nativeRequestAudioResume indisponível: " + e.getMessage());
+            Log.e(TAG, "nativeRequestAudioResume unavailable: " + e.getMessage());
         }
     }
 
@@ -668,13 +668,13 @@ public class MainActivity extends SDLActivity {
      * select_rom no ui_launcher.cpp (patch do RecompFrontend).
      */
     public static void handleNativeAppRestart() {
-        Log.i(TAG, "handleNativeAppRestart: finalizando Activity para reinício "
-                + "(estado que exige processo novo — driver Vulkan ou ROM nova; "
-                + "o app será reaberto pelo launcher)");
+        Log.i(TAG, "handleNativeAppRestart: finishing Activity for restart "
+                + (state requires a new process — Vulkan driver or new ROM; "
+                + "the app will be reopened by the launcher)");
         final SDLActivity activity = mSingleton;
         if (activity == null || activity.isFinishing()) {
-            Log.w(TAG, "handleNativeAppRestart: Activity indisponível/terminando — "
-                    + "nada a fazer; o usuário precisa reabrir o app manualmente");
+            Log.w(TAG, "handleNativeAppRestart: Activity unavailable/finishing — "
+                    + "nothing to do; the user must reopen the app manually");
             return;
         }
 
@@ -692,14 +692,14 @@ public class MainActivity extends SDLActivity {
                         PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
                 alarm.set(AlarmManager.ELAPSED_REALTIME_WAKEUP,
                         SystemClock.elapsedRealtime() + 1500L, pi);
-                Log.i(TAG, "handleNativeAppRestart: reabertura automática agendada (+1.5s)");
+                Log.i(TAG, "handleNativeAppRestart: automatic reopen scheduled (+1.5s)");
             } else {
-                Log.w(TAG, "handleNativeAppRestart: reabertura automática indisponível "
-                        + "(launch intent/alarm manager nulos) — reabra manualmente");
+                Log.w(TAG, "handleNativeAppRestart: automatic reopen unavailable "
+                        + "(launch intent/alarm manager unavailable) — reopen manually");
             }
         } catch (Throwable t) {
-            Log.w(TAG, "handleNativeAppRestart: falha ao agendar reabertura — "
-                    + "reabra manualmente", t);
+            Log.w(TAG, "handleNativeAppRestart: failed to schedule reopen — "
+                    + "reopen manually", t);
         }
 
         // Garante que o callback rode na UI thread (finish() precisa).
