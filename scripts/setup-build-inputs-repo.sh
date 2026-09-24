@@ -33,7 +33,7 @@ if [ -z "${PUBLIC_REPO:-}" ]; then
 fi
 PUBLIC_REPO="${PUBLIC_REPO:-deivid22srk/dk64-recomp-android}"
 REPO_OWNER="${PUBLIC_REPO%%/*}"
-PRIVATE_REPO="${PRIVATE_REPO:-${REPO_OWNER}/dk64-recomp-build-inputs}"
+PRIVATE_REPO="${PRIVATE_REPO:-8cee/8cee-dk64-recomp-build-inputs}"
 TAG="build-inputs"
 ASSET="Donkey.Kong.64.zip"
 
