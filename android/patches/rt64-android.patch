@@ -191,7 +191,7 @@ index 08f83e5..6347b98 100755
 diff --git a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
 old mode 100644
 new mode 100755
-index 3227ab1..b41e64b
+index 7de5b69..ebdc2a3
 --- a/src/hle/rt64_present_queue.cpp
 +++ b/src/hle/rt64_present_queue.cpp
 @@ -7,6 +7,13 @@
@@ -208,7 +208,7 @@ index 3227ab1..b41e64b
  #include "rt64_workload_queue.h"
  
  namespace RT64 {
-@@ -257,7 +264,13 @@ namespace RT64 {
+@@ -258,7 +265,13 @@ namespace RT64 {
          }
  
          // Create the framebuffers if necessary.
@@ -223,7 +223,7 @@ index 3227ab1..b41e64b
              uint32_t textureCount = ext.swapChain->getTextureCount();
              swapChainFramebuffers.resize(textureCount);
              for (uint32_t i = 0; i < textureCount; i++) {
-@@ -463,6 +476,40 @@ namespace RT64 {
+@@ -464,6 +477,40 @@ namespace RT64 {
                  }
              }
  
@@ -347,7 +347,7 @@ index 9fae0d4..c369ea3
 diff --git a/src/render/rt64_raster_shader.cpp b/src/render/rt64_raster_shader.cpp
 old mode 100644
 new mode 100755
-index 721a01e..0e6b8c8
+index 721a01e..6ab7443
 --- a/src/render/rt64_raster_shader.cpp
 +++ b/src/render/rt64_raster_shader.cpp
 @@ -13,9 +13,19 @@
@@ -726,7 +726,7 @@ index 721a01e..0e6b8c8
          }
          else if (shaderFormat == RenderShaderFormat::METAL) {
  #       ifdef __APPLE__
-@@ -237,6 +539,182 @@ namespace RT64 {
+@@ -237,6 +539,219 @@ namespace RT64 {
  #endif
          creation.multisampling = multisampling;
          pipeline = createPipeline(creation);
@@ -776,7 +776,44 @@ index 721a01e..0e6b8c8
 +            if (shaderFormat == RenderShaderFormat::SPIRV) {
 +                bool dualSourceActive = creation.alphaBlend && g_DualSourceBlendSupported;
 +
-+                if (!dualSourceActive) {
++                // Port DK64-Recomp Android: rung 1b (full fidelity, no dual source).
++                // Drivers that pass the global capability gate (modern Adreno, Mali,
++                // Xclipse...) can still reject individual alpha blended pipelines that
++                // reference SRC1. Before degrading to SAFE/SOLID (which lose mipmaps,
++                // derivatives or textures entirely and are the main source of visible
++                // glitches), retry the SAME full shader with the blend factor folded
++                // into output 0 and plain SRC_ALPHA blending. Only this pipeline is
++                // affected; the process-wide gate is left untouched so healthy
++                // pipelines keep exact N64 blending.
++                if (dualSourceActive) {
++                    const respv::Shader *noDualPS = nullptr;
++                    if (desc.flags.smoothShade) {
++                        noDualPS = useMSAA ? &optimizerCacheSPIRV->rasterPSNoDualSourceMS : &optimizerCacheSPIRV->rasterPSNoDualSource;
++                    }
++                    else {
++                        noDualPS = useMSAA ? &optimizerCacheSPIRV->rasterPSFlatNoDualSourceMS : &optimizerCacheSPIRV->rasterPSFlatNoDualSource;
++                    }
++
++                    size_t noDualSize = 0;
++                    std::unique_ptr<RenderShader> noDualShader = createSpecializedPixelShader(device, shaderFormat, *noDualPS, desc, &noDualSize);
++                    if ((noDualShader != nullptr) && noDualShader->isValid()) {
++                        PipelineCreation rungCreation = creation;
++                        rungCreation.pixelShader = noDualShader.get();
++                        rungCreation.forceNoDualSource = true;
++                        std::unique_ptr<RenderPipeline> rungPipeline = createPipeline(rungCreation);
++                        if ((rungPipeline != nullptr) && rungPipeline->isValid()) {
++                            pipeline = std::move(rungPipeline);
++                            fprintf(stderr, "RT64: raster shader (hash %016llX) adopted fallback rung 1b (full shader, no dual source, PS %zu B).\n", (unsigned long long)desc.hash(), noDualSize);
++                        }
++                    }
++
++                    // From here on every rung is a single-output permutation, so the
++                    // lower rungs must use the matching SRC_ALPHA blend state.
++                    creation.forceNoDualSource = true;
++                    dualSourceActive = false;
++                }
++
++                if (!dualSourceActive && ((pipeline == nullptr) || !pipeline->isValid())) {
 +                    const respv::Shader *safePS = desc.flags.smoothShade ? &optimizerCacheSPIRV->rasterPSSafe : &optimizerCacheSPIRV->rasterPSSafeFlat;
 +                    size_t safeSize = 0;
 +                    std::unique_ptr<RenderShader> safeShader = createSpecializedPixelShader(device, shaderFormat, *safePS, desc, &safeSize);
@@ -909,7 +946,7 @@ index 721a01e..0e6b8c8
      }
  
      RasterShader::~RasterShader() { }
-@@ -330,11 +808,22 @@ namespace RT64 {
+@@ -330,11 +845,22 @@ namespace RT64 {
          pipelineDesc.specConstantsCount = uint32_t(c.specConstants.size());
  
          // Alpha blending is performed by using dual source blending. The blending factor will be in the secondary output.
@@ -922,7 +959,7 @@ index 721a01e..0e6b8c8
              targetBlend.blendEnabled = true;
 -            targetBlend.srcBlend = RenderBlend::SRC1_ALPHA;
 -            targetBlend.dstBlend = RenderBlend::INV_SRC1_ALPHA;
-+            if (!g_DualSourceBlendSupported) {
++            if (!g_DualSourceBlendSupported || c.forceNoDualSource) {
 +                targetBlend.srcBlend = RenderBlend::SRC_ALPHA;
 +                targetBlend.dstBlend = RenderBlend::INV_SRC_ALPHA;
 +            }
@@ -934,7 +971,7 @@ index 721a01e..0e6b8c8
              targetBlend.blendOp = RenderBlendOperation::ADD;
          }
  
-@@ -441,8 +930,38 @@ namespace RT64 {
+@@ -441,8 +967,38 @@ namespace RT64 {
              return;
          }
  
@@ -974,7 +1011,7 @@ index 721a01e..0e6b8c8
  
          FramebufferRendererDescriptorCommonSet descriptorCommonSet(shaderLibrary->samplerLibrary, device->getCapabilities().raytracing);
          FramebufferRendererDescriptorTextureSet descriptorTextureSet;
-@@ -460,7 +979,7 @@ namespace RT64 {
+@@ -460,7 +1016,7 @@ namespace RT64 {
          // Generate all possible combinations of pipeline creations and assign them to each thread. Skip the ones that are invalid.
          uint32_t pipelineCount = uint32_t(std::size(pipelines));
          pipelineThreadCreations.clear();
@@ -983,7 +1020,7 @@ index 721a01e..0e6b8c8
  
          PipelineCreation creation;
          creation.device = device;
-@@ -474,16 +993,20 @@ namespace RT64 {
+@@ -474,16 +1030,20 @@ namespace RT64 {
          creation.multisampling = multisampling;
  
          uint32_t threadIndex = 0;
@@ -1006,7 +1043,7 @@ index 721a01e..0e6b8c8
          pipelineThreads.clear();
          pipelineThreads.resize(pipelineThreadCreations.size());
          for (uint32_t i = 0; i < uint32_t(pipelineThreads.size()); i++) {
-@@ -503,9 +1026,9 @@ namespace RT64 {
+@@ -503,9 +1063,9 @@ namespace RT64 {
              break;
  #   endif
          case RenderShaderFormat::SPIRV:
@@ -1019,7 +1056,7 @@ index 721a01e..0e6b8c8
              break;
  #   ifdef __APPLE__
          case RenderShaderFormat::METAL:
-@@ -552,6 +1075,10 @@ namespace RT64 {
+@@ -552,6 +1112,10 @@ namespace RT64 {
  
          postBlendDesc.pixelShader = postBlendSubNegativePixelShader.get();
          postBlendDitherNoiseSubNegativePipeline = device->createGraphicsPipeline(postBlendDesc);
@@ -1030,7 +1067,7 @@ index 721a01e..0e6b8c8
      }
  
      RasterShaderUber::~RasterShaderUber() {
-@@ -559,27 +1086,34 @@ namespace RT64 {
+@@ -559,27 +1123,34 @@ namespace RT64 {
      }
  
      void RasterShaderUber::threadCreatePipelines(uint32_t threadIndex) {
@@ -1074,7 +1111,7 @@ index 721a01e..0e6b8c8
 diff --git a/src/render/rt64_raster_shader.h b/src/render/rt64_raster_shader.h
 old mode 100644
 new mode 100755
-index 3b991ff..fa81d99
+index 3b991ff..7b67b2b
 --- a/src/render/rt64_raster_shader.h
 +++ b/src/render/rt64_raster_shader.h
 @@ -35,6 +35,29 @@ namespace RT64 {
@@ -1107,7 +1144,17 @@ index 3b991ff..fa81d99
  
          void initialize();
      };
-@@ -72,6 +95,13 @@ namespace RT64 {
+@@ -51,6 +74,9 @@ namespace RT64 {
+         bool zUpd;
+         bool cvgAdd;
+         bool usesHDR;
++        // Port DK64-Recomp Android: use single-output SRC_ALPHA blending for this
++        // pipeline only, even when the driver supports dual source blending globally.
++        bool forceNoDualSource = false;
+         std::vector<RenderSpecConstant> specConstants;
+         RenderMultisampling multisampling;
+     };
+@@ -72,6 +98,13 @@ namespace RT64 {
          static RasterShaderText generateShaderText(const ShaderDescription &desc, bool multisampling);
          static std::unique_ptr<RenderPipeline> createPipeline(const PipelineCreation &c);
          static RenderMultisampling generateMultisamplingPattern(uint32_t sampleCount, bool sampleLocationsSupported);
@@ -1121,7 +1168,7 @@ index 3b991ff..fa81d99
      };
  
      struct RasterShaderUber {
-@@ -85,6 +115,7 @@ namespace RT64 {
+@@ -85,6 +118,7 @@ namespace RT64 {
          std::mutex firstPipelineMutex;
          std::condition_variable firstPipelineCondition;
          bool pipelinesCreated = false;

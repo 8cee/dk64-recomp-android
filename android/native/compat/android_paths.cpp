@@ -21,7 +21,9 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <string>
 
 namespace androidport {
 
@@ -135,6 +137,32 @@ void init_from_args(int argc, char** argv) {
     if (g_internal.empty()) g_internal = ".";
     if (g_external.empty()) g_external = g_internal;
     ALOGI("paths: internal=%s external=%s", g_internal.c_str(), g_external.c_str());
+
+    // Renderer compatibility override (read by plume when the Vulkan device is
+    // created). A file named renderer_compat.txt containing "legacy" or "full" in
+    // the app's internal or external files dir forces the corresponding path;
+    // without it the renderer picks automatically (legacy only on Adreno 6xx
+    // proprietary drivers). An existing DK64_RENDERER_COMPAT env var wins.
+    if (getenv("DK64_RENDERER_COMPAT") == nullptr) {
+        for (const std::string* dir : { &g_external, &g_internal }) {
+            std::string path = *dir + "/renderer_compat.txt";
+            FILE* f = fopen(path.c_str(), "r");
+            if (f == nullptr) {
+                continue;
+            }
+            char buf[16] = {};
+            size_t n = fread(buf, 1, sizeof(buf) - 1, f);
+            fclose(f);
+            std::string mode(buf, n);
+            mode.erase(std::remove_if(mode.begin(), mode.end(), [](unsigned char c) { return std::isspace(c); }), mode.end());
+            std::transform(mode.begin(), mode.end(), mode.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+            if (mode == "legacy" || mode == "full") {
+                setenv("DK64_RENDERER_COMPAT", mode.c_str(), 1);
+                ALOGI("renderer compat override from %s: %s", path.c_str(), mode.c_str());
+                break;
+            }
+        }
+    }
 }
 
 // Busca por uma ROM compatível (.z64/.n64/.v64) nos diretórios conhecidos.

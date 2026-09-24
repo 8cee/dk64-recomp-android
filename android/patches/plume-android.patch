@@ -96,10 +96,10 @@ index 9dcfedf..fc48030
 diff --git a/plume_vulkan.cpp b/plume_vulkan.cpp
 old mode 100644
 new mode 100755
-index f1dd503..0286f62
+index f1dd503..690fe12
 --- a/plume_vulkan.cpp
 +++ b/plume_vulkan.cpp
-@@ -10,6 +10,24 @@
+@@ -10,9 +10,30 @@
  
  #include "plume_vulkan.h"
  
@@ -124,7 +124,13 @@ index f1dd503..0286f62
  #include <algorithm>
  #include <cmath>
  #include <climits>
-@@ -89,10 +107,25 @@ namespace plume {
++#include <cstdio>
++#include <cstdlib>
++#include <cstring>
+ #include <unordered_map>
+ 
+ #if DLSS_ENABLED
+@@ -89,10 +110,25 @@ namespace plume {
          VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME,
          // Vulkan spec requires this to be enabled if supported by the driver.
          VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME,
@@ -150,7 +156,7 @@ index f1dd503..0286f62
      static uint32_t roundUp(uint32_t value, uint32_t powerOf2Alignment) {
          return (value + powerOf2Alignment - 1) & ~(powerOf2Alignment - 1);
      }
-@@ -1304,6 +1337,10 @@ namespace plume {
+@@ -1304,6 +1340,10 @@ namespace plume {
          }
      }
  
@@ -161,7 +167,7 @@ index f1dd503..0286f62
      VulkanShader::~VulkanShader() {
          if (vk != VK_NULL_HANDLE) {
              vkDestroyShaderModule(device->vk, vk, nullptr);
-@@ -1397,6 +1434,10 @@ namespace plume {
+@@ -1397,6 +1437,10 @@ namespace plume {
          }
      }
  
@@ -172,7 +178,7 @@ index f1dd503..0286f62
      VulkanComputePipeline::~VulkanComputePipeline() {
          if (vk != VK_NULL_HANDLE) {
              vkDestroyPipeline(device->vk, vk, nullptr);
-@@ -1656,6 +1697,10 @@ namespace plume {
+@@ -1656,6 +1700,10 @@ namespace plume {
          }
      }
  
@@ -183,7 +189,7 @@ index f1dd503..0286f62
      VulkanGraphicsPipeline::~VulkanGraphicsPipeline() {
          if (vk != VK_NULL_HANDLE) {
              vkDestroyPipeline(device->vk, vk, nullptr);
-@@ -1864,6 +1909,10 @@ namespace plume {
+@@ -1864,6 +1912,10 @@ namespace plume {
          groupCount = pipelineInfo.groupCount;
      }
      
@@ -194,7 +200,7 @@ index f1dd503..0286f62
      VulkanRaytracingPipeline::~VulkanRaytracingPipeline() {
          if (vk != VK_NULL_HANDLE) {
              vkDestroyPipeline(device->vk, vk, nullptr);
-@@ -1910,7 +1959,9 @@ namespace plume {
+@@ -1910,7 +1962,9 @@ namespace plume {
  
          setLayout = new VulkanDescriptorSetLayout(device, desc);
  
@@ -205,7 +211,7 @@ index f1dd503..0286f62
          if (descriptorPool == VK_NULL_HANDLE) {
              return;
          }
-@@ -1932,6 +1983,11 @@ namespace plume {
+@@ -1932,6 +1986,11 @@ namespace plume {
          VkResult res = vkAllocateDescriptorSets(device->vk, &allocateInfo, &vk);
          if (res != VK_SUCCESS) {
              fprintf(stderr, "vkAllocateDescriptorSets failed with error code 0x%X.\n", res);
@@ -217,7 +223,7 @@ index f1dd503..0286f62
              return;
          }
      }
-@@ -2021,6 +2077,14 @@ namespace plume {
+@@ -2021,6 +2080,14 @@ namespace plume {
      void VulkanDescriptorSet::setDescriptor(uint32_t descriptorIndex, const VkDescriptorBufferInfo *bufferInfo, const VkDescriptorImageInfo *imageInfo, const VkBufferView *texelBufferView, void *pNext) {
          assert(descriptorIndex < setLayout->descriptorBindingIndices.size());
  
@@ -232,7 +238,7 @@ index f1dd503..0286f62
          const uint32_t indexBase = setLayout->descriptorIndexBases[descriptorIndex];
          const uint32_t bindingIndex = setLayout->descriptorBindingIndices[descriptorIndex];
          const VkDescriptorSetLayoutBinding &setLayoutBinding = setLayout->setBindings[bindingIndex];
-@@ -2039,15 +2103,40 @@ namespace plume {
+@@ -2039,15 +2106,40 @@ namespace plume {
          vkUpdateDescriptorSets(device->vk, 1, &writeDescriptor, 0, nullptr);
      }
  
@@ -276,7 +282,7 @@ index f1dd503..0286f62
              poolSizes.emplace_back(poolSize);
          }
  
-@@ -2097,11 +2186,40 @@ namespace plume {
+@@ -2097,11 +2189,40 @@ namespace plume {
          }
  #   elif defined(PLUME_SDL_VULKAN_ENABLED)
          VulkanInterface *renderInterface = commandQueue->device->renderInterface;
@@ -317,7 +323,7 @@ index f1dd503..0286f62
  #   elif defined(__ANDROID__)
          assert(desc.renderWindow != nullptr);
          VkAndroidSurfaceCreateInfoKHR surfaceCreateInfo = {};
-@@ -2205,8 +2323,45 @@ namespace plume {
+@@ -2205,8 +2326,45 @@ namespace plume {
          }
  
          if (compatibleSurfaceFormats.empty()) {
@@ -363,7 +369,7 @@ index f1dd503..0286f62
          }
  
          // Pick the preferred color space, if not available, pick whatever first shows up on the list.
-@@ -2309,9 +2464,74 @@ namespace plume {
+@@ -2309,9 +2467,74 @@ namespace plume {
          }
      }
  
@@ -438,7 +444,7 @@ index f1dd503..0286f62
          // Don't recreate the swap chain at all if the window doesn't have a valid size.
          if ((width == 0) || (height == 0)) {
              return false;
-@@ -2704,7 +2924,7 @@ namespace plume {
+@@ -2704,7 +2927,7 @@ namespace plume {
      }
  
      void VulkanQueryPool::queryResults() {
@@ -447,7 +453,7 @@ index f1dd503..0286f62
          if (res != VK_SUCCESS) {
              fprintf(stderr, "vkGetQueryPoolResults failed with error code 0x%X.\n", res);
              return;
-@@ -2795,6 +3015,12 @@ namespace plume {
+@@ -2795,6 +3018,12 @@ namespace plume {
      void VulkanCommandList::begin() {
          vkResetCommandBuffer(vk, 0);
  
@@ -460,7 +466,7 @@ index f1dd503..0286f62
          VkCommandBufferBeginInfo beginInfo = {};
          beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
          beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-@@ -2819,6 +3045,12 @@ namespace plume {
+@@ -2819,6 +3048,12 @@ namespace plume {
          activeComputePipelineLayout = nullptr;
          activeGraphicsPipelineLayout = nullptr;
          activeRaytracingPipelineLayout = nullptr;
@@ -473,7 +479,7 @@ index f1dd503..0286f62
      }
  
      void VulkanCommandList::barriers(RenderBarrierStages stages, const RenderBufferBarrier *bufferBarriers, uint32_t bufferBarriersCount, const RenderTextureBarrier *textureBarriers, uint32_t textureBarriersCount) {
-@@ -2888,6 +3120,14 @@ namespace plume {
+@@ -2888,6 +3123,14 @@ namespace plume {
      void VulkanCommandList::dispatch(uint32_t threadGroupCountX, uint32_t threadGroupCountY, uint32_t threadGroupCountZ) {
          assert(activeComputePipelineLayout != nullptr);
  
@@ -488,7 +494,7 @@ index f1dd503..0286f62
          vkCmdDispatch(vk, threadGroupCountX, threadGroupCountY, threadGroupCountZ);
      }
  
-@@ -2929,6 +3169,27 @@ namespace plume {
+@@ -2929,6 +3172,27 @@ namespace plume {
          assert(activeGraphicsPipelineLayout != nullptr);
          checkActiveRenderPass();
  
@@ -516,7 +522,7 @@ index f1dd503..0286f62
          vkCmdDraw(vk, vertexCountPerInstance, instanceCount, startVertexLocation, startInstanceLocation);
      }
      
-@@ -2936,26 +3197,69 @@ namespace plume {
+@@ -2936,26 +3200,69 @@ namespace plume {
          assert(activeGraphicsPipelineLayout != nullptr);
          checkActiveRenderPass();
  
@@ -586,7 +592,7 @@ index f1dd503..0286f62
              vkCmdBindPipeline(vk, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, raytracingPipeline->vk);
              break;
          }
-@@ -2986,6 +3290,14 @@ namespace plume {
+@@ -2986,6 +3293,14 @@ namespace plume {
      void VulkanCommandList::setGraphicsPipelineLayout(const RenderPipelineLayout *pipelineLayout) {
          assert(pipelineLayout != nullptr);
  
@@ -601,7 +607,7 @@ index f1dd503..0286f62
          activeGraphicsPipelineLayout = static_cast<const VulkanPipelineLayout *>(pipelineLayout);
      }
  
-@@ -3494,7 +3806,21 @@ namespace plume {
+@@ -3494,7 +3809,21 @@ namespace plume {
          assert(setIndex < pipelineLayout->descriptorSetLayouts.size());
  
          const VulkanDescriptorSet *interfaceSet = static_cast<const VulkanDescriptorSet *>(descriptorSet);
@@ -623,7 +629,7 @@ index f1dd503..0286f62
      }
  
      // VulkanCommandFence
-@@ -3921,6 +4247,20 @@ namespace plume {
+@@ -3921,6 +4250,20 @@ namespace plume {
              vkGetPhysicalDeviceProperties2(physicalDevice, &deviceProperties2);
          }
  
@@ -644,7 +650,7 @@ index f1dd503..0286f62
          // Build the device creation chain.
          void *createDeviceChain = nullptr;
          const bool rayTracingSupported = rayTracingPipelineFeatures.rayTracingPipeline && accelerationStructureFeatures.accelerationStructure;
-@@ -4131,7 +4471,22 @@ namespace plume {
+@@ -4131,7 +4474,22 @@ namespace plume {
          capabilities.bufferDeviceAddress = bufferDeviceAddressSupported;
          capabilities.samplerMirrorClampToEdge = supportedOptionalExtensions.find(VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE_EXTENSION_NAME) != supportedOptionalExtensions.end();
          capabilities.presentWait = presentWaitSupported;
@@ -667,7 +673,7 @@ index f1dd503..0286f62
          capabilities.maxTextureSize = physicalDeviceProperties.limits.maxImageDimension2D;
          capabilities.preferHDR = memoryHeapSize > (512 * 1024 * 1024);
          capabilities.dynamicDepthBias = true;
-@@ -4139,6 +4494,43 @@ namespace plume {
+@@ -4139,6 +4497,86 @@ namespace plume {
          capabilities.uma = (description.type == RenderDeviceType::INTEGRATED) && hasHostVisibleDeviceLocalMemory;
          capabilities.gpuUploadHeap = capabilities.uma;
  
@@ -680,7 +686,50 @@ index f1dd503..0286f62
 +        // Newer Qualcomm generations are kept in the same fail-closed gate because
 +        // their behavior can't be verified here; the degradation is visually neutral
 +        // for N64 content in the common case.
-+        capabilities.flatShadingReliable = !((physicalDeviceProperties.vendorID == 0x5143) && (driverProperties.driverID != VK_DRIVER_ID_MESA_TURNIP));
++        // Port DK64-Recomp Android: the legacy compatibility gate below used to cover
++        // EVERY proprietary Qualcomm driver. That forced modern Adreno GPUs (7xx/8xx,
++        // e.g. Adreno 740/750/830/840) onto the degraded raster permutations (flat
++        // colors interpolated, no dual source blending, no uber shaders), which is a
++        // visible source of wrong colors and broken transparency. The failures were
++        // only ever observed on the Adreno 6xx family (618/619), so the gate now
++        // targets that generation. Unknown/unparseable proprietary Qualcomm device
++        // names keep the old fail-closed behavior. Newer drivers still go through
++        // the flat-varying probe and the per-pipeline fallback ladder in RT64.
++        //
++        // Manual override for testing: set DK64_RENDERER_COMPAT=legacy (force the
++        // old degraded path) or DK64_RENDERER_COMPAT=full (force the normal path).
++        bool legacyQualcommGate = false;
++        if ((physicalDeviceProperties.vendorID == 0x5143) && (driverProperties.driverID != VK_DRIVER_ID_MESA_TURNIP)) {
++            int adrenoModel = 0;
++            const char *adrenoName = strstr(physicalDeviceProperties.deviceName, "Adreno");
++            if (adrenoName != nullptr) {
++                const char *cursor = adrenoName;
++                while ((*cursor != '\0') && ((*cursor < '0') || (*cursor > '9'))) {
++                    cursor++;
++                }
++
++                adrenoModel = atoi(cursor);
++            }
++
++            // 0 means the model couldn't be identified: stay conservative.
++            legacyQualcommGate = (adrenoModel < 700);
++            fprintf(stderr, "plume: proprietary Qualcomm driver on '%s' (model %d): %s renderer path.\n",
++                physicalDeviceProperties.deviceName, adrenoModel, legacyQualcommGate ? "legacy compatibility" : "full");
++        }
++
++        const char *compatOverride = getenv("DK64_RENDERER_COMPAT");
++        if (compatOverride != nullptr) {
++            if (strcmp(compatOverride, "legacy") == 0) {
++                legacyQualcommGate = true;
++                fprintf(stderr, "plume: DK64_RENDERER_COMPAT=legacy, forcing the legacy compatibility renderer path.\n");
++            }
++            else if (strcmp(compatOverride, "full") == 0) {
++                legacyQualcommGate = false;
++                fprintf(stderr, "plume: DK64_RENDERER_COMPAT=full, forcing the full renderer path.\n");
++            }
++        }
++
++        capabilities.flatShadingReliable = !legacyQualcommGate;
 +
 +        // Port DK64-Recomp Android: the proprietary Qualcomm Vulkan drivers of this
 +        // family also fail the final shader codegen of the ~113 KB raster uber pixel
@@ -711,7 +760,7 @@ index f1dd503..0286f62
  #   if defined(__APPLE__)
          // MoltenVK supports triangle fans but does so via compute shaders to translate to lists, since it has to
          // support all cases including indirect draw. This results in renderpass restarts that can harm performance,
-@@ -4464,11 +4856,30 @@ namespace plume {
+@@ -4464,11 +4902,30 @@ namespace plume {
  #else
      VulkanInterface::VulkanInterface() {
  #endif

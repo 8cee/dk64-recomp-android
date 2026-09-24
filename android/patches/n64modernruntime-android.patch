@@ -1,5 +1,5 @@
 diff --git a/librecomp/src/recomp.cpp b/librecomp/src/recomp.cpp
-index ea1c49b..262274c 100644
+index 850689d..d30ada2 100644
 --- a/librecomp/src/recomp.cpp
 +++ b/librecomp/src/recomp.cpp
 @@ -183,15 +183,40 @@ static std::vector<uint8_t> read_file(const std::filesystem::path& path) {
@@ -99,7 +99,7 @@ index ea1c49b..262274c 100644
                  }
  
                  auto find_it = game_roms.find(current_game.value());
-@@ -869,12 +922,31 @@ void recomp::start(const recomp::Configuration& cfg) {
+@@ -972,12 +1025,31 @@ void recomp::start(const recomp::Configuration& cfg) {
  
          ultramodern::set_native_thread_name("Game Start Thread");
  
@@ -136,4 +136,4 @@ index ea1c49b..262274c 100644
 +        }
      }, window_handle, rdram};
  
-     while (!exited) {
+     parse_cli(cfg.argc, cfg.argv);
