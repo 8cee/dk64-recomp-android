@@ -66,13 +66,13 @@ public final class GpuDriverInstaller {
         File base = new File(ctx.getFilesDir(), DRIVER_BASE);
         File installedRoot = new File(base, DRIVER_INSTALLED);
         if (!installedRoot.isDirectory() && !installedRoot.mkdirs()) {
-            throw new IOException("não foi possível criar " + installedRoot);
+            throw new IOException("could not create " + installedRoot);
         }
 
         String id = sanitizeId(displayName) + "-" + Long.toString(System.currentTimeMillis(), 36);
         File target = new File(installedRoot, id);
         if (!target.isDirectory() && !target.mkdirs()) {
-            throw new IOException("não foi possível criar " + target);
+            throw new IOException("could not create " + target);
         }
 
         try {
@@ -86,7 +86,7 @@ public final class GpuDriverInstaller {
                 String soName = sanitizeId(displayName);
                 if (!soName.toLowerCase().endsWith(".so")) soName = soName + ".so";
                 try (InputStream in = ctx.getContentResolver().openInputStream(uri)) {
-                    if (in == null) throw new IOException("não foi possível abrir o arquivo");
+                    if (in == null) throw new IOException("could not open the file");
                     copyStreamTo(in, new File(target, soName));
                 }
                 library = soName;
@@ -95,7 +95,7 @@ public final class GpuDriverInstaller {
                 String prefix = null;
                 JSONObject meta = null;
                 try (InputStream in = ctx.getContentResolver().openInputStream(uri)) {
-                    if (in == null) throw new IOException("não foi possível abrir o arquivo");
+                    if (in == null) throw new IOException("could not open the file");
                     Object[] found = findMetaJson(in);
                     if (found != null) {
                         prefix = (String) found[0];
@@ -126,8 +126,8 @@ public final class GpuDriverInstaller {
 
                 if (library == null) library = findPreferredDriverSo(target);
                 if (library == null || library.isEmpty()) {
-                    throw new IOException("nenhum .so de driver (libvulkan*/vulkan*) "
-                            + "encontrado no arquivo");
+                    throw new IOException("no driver .so (libvulkan*/vulkan*) "
+                            + "was found in the archive");
                 }
 
                 // Tolerância: soname do meta dentro de subpasta — traz p/ raiz
@@ -138,13 +138,13 @@ public final class GpuDriverInstaller {
                         copyStreamTo(new FileInputStream(nested), libFile);
                     } else {
                         throw new IOException(".so do driver ('" + library
-                                + "') não veio no arquivo");
+                                + "') was not included in the archive");
                     }
                 }
             }
 
             if (minApi > Build.VERSION.SDK_INT) {
-                throw new IOException("driver exige Android " + minApi + "+ (este device: "
+                throw new IOException("driver requires Android " + minApi + "+ (this device: "
                         + Build.VERSION.SDK_INT + ")");
             }
 
@@ -191,7 +191,7 @@ public final class GpuDriverInstaller {
             probeJson = nativeProbeCustomDriver(ctx.getFilesDir().getAbsolutePath(),
                     ctx.getApplicationInfo().nativeLibraryDir);
         } catch (Throwable t) {
-            Log.w(TAG, "Probe nativo indisponível — driver aceito sem validação", t);
+            Log.w(TAG, "Native probe unavailable — driver accepted without validation", t);
         }
 
         if (probeJson == null) {
@@ -206,7 +206,7 @@ public final class GpuDriverInstaller {
             final String device = j.optString("device", "");
             final String api = j.optString("api", "");
             final String probeError = j.optString("error", "");
-            Log.i(TAG, "Probe do driver: " + probeJson);
+            Log.i(TAG, "Driver probe: " + probeJson);
 
             if (active && ok) {
                 return "Driver \"" + friendlyName + "\" installed and verified: "
@@ -248,9 +248,9 @@ public final class GpuDriverInstaller {
             if (dirs != null) for (File d : dirs) deleteRecursively(d);
             deleteRecursively(new File(base, "tmp"));
             deleteRecursively(new File(base, "cache"));
-            Log.i(TAG, "Seleção de driver removida");
+            Log.i(TAG, "Driver selection removed");
         } catch (Exception ex) {
-            Log.e(TAG, "Falha ao remover seleção de driver", ex);
+            Log.e(TAG, "Failed to remove driver selection", ex);
         }
     }
 
@@ -298,7 +298,7 @@ public final class GpuDriverInstaller {
      */
     private static void extractZipFlattened(Context ctx, Uri uri, File target) throws IOException {
         try (InputStream in = ctx.getContentResolver().openInputStream(uri)) {
-            if (in == null) throw new IOException("não foi possível reabrir o zip");
+            if (in == null) throw new IOException("could not reopen the zip");
             ZipInputStream zip = new ZipInputStream(in);
             ZipEntry entry;
             long total = 0;
@@ -315,7 +315,7 @@ public final class GpuDriverInstaller {
                     int n;
                     while ((n = zip.read(buf)) > 0) {
                         total += n;
-                        if (total > MAX_DRIVER_ZIP_BYTES) throw new IOException("driver maior que 512 MB");
+                        if (total > MAX_DRIVER_ZIP_BYTES) throw new IOException("driver is larger than 512 MB");
                         os.write(buf, 0, n);
                     }
                 }
@@ -362,7 +362,7 @@ public final class GpuDriverInstaller {
 
     private static void extractZipUnderPrefix(Context ctx, Uri uri, String prefix, File target) throws IOException {
         try (InputStream in = ctx.getContentResolver().openInputStream(uri)) {
-            if (in == null) throw new IOException("não foi possível reabrir o zip");
+            if (in == null) throw new IOException("could not reopen the zip");
             ZipInputStream zip = new ZipInputStream(in);
             ZipEntry entry;
             long total = 0;
@@ -383,14 +383,14 @@ public final class GpuDriverInstaller {
                 }
                 File parent = out.getParentFile();
                 if (parent != null && !parent.isDirectory() && !parent.mkdirs()) {
-                    throw new IOException("não foi possível criar " + parent);
+                    throw new IOException("could not create " + parent);
                 }
                 byte[] buf = new byte[1 << 16];
                 try (OutputStream os = new FileOutputStream(out)) {
                     int n;
                     while ((n = zip.read(buf)) > 0) {
                         total += n;
-                        if (total > MAX_DRIVER_ZIP_BYTES) throw new IOException("driver maior que 512 MB");
+                        if (total > MAX_DRIVER_ZIP_BYTES) throw new IOException("driver is larger than 512 MB");
                         os.write(buf, 0, n);
                     }
                 }
