@@ -213,7 +213,7 @@ public final class DiagnosticsLogger {
                         if (cur == s) {
                             session = null; // drainLogcat para de gravar
                             writeCrash(s, thread, throwable);
-                            writeSummary(s, "CRASH — resumo gerado no instante do crash");
+                            writeSummary(s, "CRASH — summary generated at crash time");
                             closeWriters(s);
                         }
                     } catch (Throwable ignored) { }
