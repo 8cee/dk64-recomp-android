@@ -44,7 +44,7 @@ final class AppSetup {
         try {
             prepareAssets(ctx);
         } catch (IOException ex) {
-            Log.e(TAG, "Falha ao copiar assets do APK", ex);
+            Log.e(TAG, "Failed to copy APK assets", ex);
         }
     }
 
@@ -60,7 +60,7 @@ final class AppSetup {
 
     private static void prepareAssets(Context ctx) throws IOException {
         File filesDir = ctx.getFilesDir();
-        if (filesDir == null) throw new IOException("filesDir indisponível");
+        if (filesDir == null) throw new IOException("filesDir unavailable");
         File assetsDir = new File(filesDir, "assets");
         copyApkAssets(ctx, "", assetsDir);
         // recompcontrollerdb.txt vem do nosso src/main/assets e é OBRIGATÓRIO
@@ -69,7 +69,7 @@ final class AppSetup {
             copyStream(in, new File(filesDir, "recompcontrollerdb.txt"));
         }
         writeTextFile(new File(filesDir, ASSETS_VERSION_MARKER), ASSETS_VERSION);
-        Log.i(TAG, "Assets copiados para " + filesDir);
+        Log.i(TAG, "Assets copied to " + filesDir);
     }
 
     private static void copyApkAssets(Context ctx, String path, File destDir) throws IOException {
@@ -90,7 +90,7 @@ final class AppSetup {
                 copyStream(in, out);
             } catch (FileNotFoundException e) {
                 // Entrada sem filhos que não abre = diretório vazio; ignora.
-                Log.w(TAG, "Asset não aberto (ignorado): " + rel);
+                Log.w(TAG, "Asset could not be opened (ignored): " + rel);
             }
         }
     }
