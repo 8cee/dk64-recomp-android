@@ -25,7 +25,7 @@
  * JNI, ANTES do main() do jogo. internal_files_dir() só é preenchido por
  * init_from_args() (argv do SDL), que ainda não executou nesse momento —
  * com o files dir vazio, selected.txt nunca era encontrado, o nativo nem
- * tentava carregar o driver e o probe devolvia "driver não carregado" em
+ * tentava carregar o driver e o probe devolvia "driver not loaded" em
  * ~1 ms, rejeitando QUALQUER driver (rollback automático no Java). Correção:
  * o JNI agora recebe filesDir e nativeLibraryDir do Java (set_runtime_paths)
  * e funciona tanto no Setup quanto no jogo (mesmo processo).
@@ -180,8 +180,8 @@ bool find_native_library_dir(std::string &out) {
         struct stat st;
         if (stat((dir + "/libmain_hook.so").c_str(), &st) != 0 ||
             stat((dir + "/libhook_impl.so").c_str(), &st) != 0) {
-            ALOGE("custom driver: hooks ausentes em '%s' (APK sem useLegacyPackaging?) — "
-                  "usando driver do sistema", dir.c_str());
+            ALOGE("custom driver: hooks missing in '%s' (APK without useLegacyPackaging?) — "
+                  "using system driver", dir.c_str());
             continue;
         }
 
@@ -211,7 +211,7 @@ static void run_probe_locked() {
     g_probe = ProbeResult{};
     g_probe.ok = false;
     if (g_state.proc_addr == nullptr) {
-        g_probe.error = "driver não carregado";
+        g_probe.error = "driver not loaded";
         return;
     }
 
@@ -232,7 +232,7 @@ static void run_probe_locked() {
     auto gipa = reinterpret_cast<PFN_vkGetInstanceProcAddr>(g_state.proc_addr);
     auto pfnCreateInstance = reinterpret_cast<PFN_vkCreateInstance>(gipa(nullptr, "vkCreateInstance"));
     if (pfnCreateInstance == nullptr) {
-        g_probe.error = "vkCreateInstance ausente no driver";
+        g_probe.error = "vkCreateInstance missing from driver";
         return;
     }
 
@@ -261,7 +261,7 @@ static void run_probe_locked() {
     auto pfnGetProps = reinterpret_cast<PFN_vkGetPhysicalDeviceProperties>(gipa(instance, "vkGetPhysicalDeviceProperties"));
     auto pfnDestroyInstance = reinterpret_cast<PFN_vkDestroyInstance>(gipa(instance, "vkDestroyInstance"));
     if (pfnEnumDevices == nullptr || pfnGetProps == nullptr || pfnDestroyInstance == nullptr) {
-        g_probe.error = "entry points Vulkan ausentes no driver";
+        g_probe.error = "Vulkan entry points missing from driver";
         if (pfnDestroyInstance != nullptr) pfnDestroyInstance(instance, nullptr);
         return;
     }
@@ -278,7 +278,7 @@ static void run_probe_locked() {
 
     g_probe.deviceCount = (int)count;
     if (count == 0) {
-        g_probe.error = "nenhuma GPU Vulkan exposta pelo driver "
+        g_probe.error = "no Vulkan GPU exposed by driver "
                         "(build sem suporte à geração da GPU deste aparelho?)";
     } else {
         std::vector<VkPhysicalDevice> devs(count);
@@ -295,7 +295,7 @@ static void run_probe_locked() {
             }
             g_probe.ok = true;
         } else {
-            g_probe.error = "vkEnumeratePhysicalDevices falhou no 2º passo";
+            g_probe.error = "vkEnumeratePhysicalDevices failed on second pass";
         }
     }
 
@@ -363,7 +363,7 @@ void ensure_loaded_locked() {
     g_state.name = hasSelection ? sel.name : std::string{};
 
     if (!hasSelection) {
-        ALOGI("custom driver: nenhum driver selecionado, usando driver do sistema");
+        ALOGI("custom driver: no driver selected, using system driver");
         run_probe_locked();
         return;
     }
@@ -383,14 +383,14 @@ void ensure_loaded_locked() {
             stat((java_nld + "/libhook_impl.so").c_str(), &stHook) == 0) {
             hook_lib_dir = java_nld;
         } else {
-            ALOGE("custom driver: hooks ausentes em nativeLibraryDir='%s' "
+            ALOGE("custom driver: hooks missing in nativeLibraryDir='%s' "
                   "(APK sem useLegacyPackaging?) — tentando /proc/self/maps",
                   java_nld.c_str());
         }
     }
     if (hook_lib_dir.empty() && !find_native_library_dir(hook_lib_dir)) {
-        ALOGE("custom driver: nativeLibraryDir não resolvido (JNI vazio + "
-              "libmain.so ausente em /proc/self/maps)");
+        ALOGE("custom driver: nativeLibraryDir unresolved (empty JNI path + "
+              "libmain.so missing from /proc/self/maps)");
         return;
     }
 
@@ -406,14 +406,14 @@ void ensure_loaded_locked() {
     /*
      * Pré-validação (espelha as checagens internas do adrenotools, que falham
      * retornando nullptr SEM nenhum log): stat do arquivo exato que ele vai
-     * abrir. Sem isso um caminho errado vira "driver não carregado" sem
+     * abrir. Sem isso um caminho errado vira "driver not loaded" sem
      * nenhuma pista no logcat.
      */
     const std::string driver_file = driver_dir + sel.library;
     struct stat stDriver;
     if (stat(driver_file.c_str(), &stDriver) != 0) {
-        ALOGE("custom driver: ARQUIVO DO DRIVER INEXISTENTE: '%s' (errno=%d) — "
-              "instalação corrompida ou soname errado; abortando",
+        ALOGE("custom driver: DRIVER FILE MISSING: '%s' (errno=%d) — "
+              "corrupt installation or wrong soname; aborting",
               driver_file.c_str(), errno);
     }
 
@@ -436,7 +436,7 @@ void ensure_loaded_locked() {
         nullptr);
 
     if (handle == nullptr) {
-        ALOGE("custom driver: adrenotools_open_libvulkan falhou, usando driver do sistema "
+        ALOGE("custom driver: adrenotools_open_libvulkan failed, using system driver "
               "(hookLibDir='%s')", hook_lib_dir.c_str());
         run_probe_locked();
         return;
@@ -444,7 +444,7 @@ void ensure_loaded_locked() {
 
     void *proc = dlsym(handle, "vkGetInstanceProcAddr");
     if (proc == nullptr) {
-        ALOGE("custom driver: vkGetInstanceProcAddr não encontrado, usando driver do sistema");
+        ALOGE("custom driver: vkGetInstanceProcAddr not found, using system driver");
         run_probe_locked();
         return;
     }
@@ -461,16 +461,16 @@ void ensure_loaded_locked() {
     // em vez de falhar com "Unable to find compatible graphics device".
     run_probe_locked();
     if (!g_probe.ok) {
-        ALOGE("custom driver: '%s' DESCARTADO — probe não expôs GPU Vulkan (%s). "
-              "Usando driver do sistema. Instale um build Turnip compatível com a "
-              "GPU do aparelho (para Adreno 6xx use builds 'a6xx', ex.: "
+        ALOGE("custom driver: '%s' REJECTED — probe exposed no Vulkan GPU (%s). "
+              "Using the system driver. Install a Turnip build compatible with the "
+              "device GPU (for Adreno 6xx use 'a6xx' builds, e.g. "
               "K11MCH1/AdrenoToolsDrivers).", sel.name.c_str(), g_probe.error.c_str());
         g_state.proc_addr = nullptr;
         g_state.active = false;
         return;
     }
 
-    ALOGI("custom driver: probe OK — %d dispositivo(s) Vulkan, GPU '%s' (API Vulkan %s)",
+    ALOGI("custom driver: probe OK — %d Vulkan device(s), GPU '%s' (Vulkan API %s)",
           g_probe.deviceCount, g_probe.firstName.c_str(), g_probe.apiVersion.c_str());
 }
 
@@ -541,15 +541,15 @@ void reset_selection() {
  * ApplicationInfo.nativeLibraryDir) e os injeta via set_runtime_paths ANTES
  * de qualquer uso — sem isso internal_files_dir() estaria vazio aqui, pois
  * init_from_args() só roda no main() do jogo (bug do 2º release: o probe
- * devolvia "driver não carregado" para QUALQUER driver em ~1 ms).
+ * devolvia "driver not loaded" para QUALQUER driver em ~1 ms).
  *
  * Devolve um JSON:
  *
  *   {"active":true,"ok":true,"devices":1,
  *    "device":"Adreno (TM) 619","api":"1.3.280","error":""}
  *   {"active":true,"ok":false,"devices":0,"device":"","api":"",
- *    "error":"nenhuma GPU Vulkan exposta pelo driver (...)"}   <- driver sem suporte à GPU
- *   {"active":false,...,"error":"driver não carregado"}        <- falha no carregamento
+ *    "error":"no Vulkan GPU exposed by driver (...)"}   <- driver sem suporte à GPU
+ *   {"active":false,...,"error":"driver not loaded"}        <- falha no carregamento
  *
  * O SetupActivity usa isso para RECUSAR drivers incompatíveis (ex.: build
  * a7xx/a8xx num Adreno 619/a6xx) com uma mensagem clara, em vez de deixar o
