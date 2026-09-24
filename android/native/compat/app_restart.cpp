@@ -60,7 +60,7 @@ bool dispatch_restart_to_java(JNIEnv *env) {
                                                      std::memory_order_acq_rel)) {
         return false;
     }
-    ALOGI("app_restart: reinício solicitado pelo nativo (estado que exige "
+    ALOGI("app_restart: native restart requested (state requires "
           "processo novo — troca de driver ou seleção de ROM)");
 
     jclass cls = nullptr;
@@ -72,8 +72,8 @@ bool dispatch_restart_to_java(JNIEnv *env) {
     }
 
     if (cls == nullptr || mid == nullptr) {
-        ALOGW("app_restart: cache JNI vazio (nativeRestartInit não rodou?) — "
-              "reabra o app manualmente para usar o novo driver");
+        ALOGW("app_restart: JNI cache empty (nativeRestartInit did not run?) — "
+              "reopen the app manually to use the new driver");
         return false;
     }
 
@@ -106,7 +106,7 @@ void cache_restart_entrypoints(void *env, void *clazz) {
     jmethodID mid = jni->GetStaticMethodID(local, "handleNativeAppRestart", "()V");
     if (mid == nullptr) {
         if (jni->ExceptionCheck()) jni->ExceptionClear();
-        ALOGW("app_restart: MainActivity.handleNativeAppRestart()V não encontrado "
+        ALOGW("app_restart: MainActivity.handleNativeAppRestart()V not found "
               "para o cache");
         return;
     }
@@ -142,7 +142,7 @@ void native_request_app_restart() {
      * file_bridge.cpp/call_java_request), despachar e desanexar ao fim.
      */
     if (g_vm == nullptr) {
-        ALOGW("app_restart: JavaVM não registrada (nativeBridgeInit não rodou?) — "
+        ALOGW("app_restart: JavaVM not registered (nativeRestartInit did not run?) — "
               "reinicie o app manualmente para usar o driver novo");
         return;
     }
@@ -169,8 +169,8 @@ void native_request_app_restart() {
     }
 
     if (!dispatched) {
-        ALOGW("app_restart: reinício não despachado — "
-              "reabra o app manualmente para usar o driver novo");
+        ALOGW("app_restart: restart not dispatched — "
+              "reopen the app manually to use the new driver");
     }
 }
 } // namespace dk64
@@ -201,7 +201,7 @@ Java_com_deivid22srk_dk64recomp_MainActivity_nativeRestartInit(JNIEnv *env, jcla
         dk64::set_java_vm(vm);
         dk64::cache_restart_entrypoints(env, clazz);
         __android_log_print(ANDROID_LOG_INFO, "DK64Recomp",
-                            "app_restart: JavaVM + entrada de reinício registradas");
+                            "app_restart: JavaVM + restart entry point registered");
     }
 }
 
