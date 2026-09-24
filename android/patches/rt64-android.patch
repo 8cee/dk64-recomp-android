@@ -107,12 +107,13 @@ index 0000000..0000000 100644
          case UserConfiguration::Resolution::WindowIntegerScale:
              if (ext.sharedResources->swapChainHeight > 0) {
 +#if defined(__ANDROID__)
-+                // Android surfaces commonly have non-integer usable heights because of
-+                // cutouts/system insets. Never choose an integer scale that is larger
-+                // than the actual swapchain: the upstream ceil() path can turn a
-+                // ~1080px surface into 5x (1200px), which corrupts framebuffer effects
-+                // on several mobile Vulkan drivers. Keep Auto integer-scaled, but fit.
-+                resolutionMultiplier = std::max(float(ext.sharedResources->swapChainHeight / referenceHeight), 1.0f);
++                // Android Auto resolution safety cap. Real-device testing showed that
++                // higher integer scales still corrupt DK64 framebuffer effects on
++                // mobile Vulkan, while Original 2x is clean. Keep Auto responsive to
++                // very small surfaces, but never exceed the proven-safe 2x path.
++                resolutionMultiplier = std::clamp(
++                    float(ext.sharedResources->swapChainHeight / referenceHeight),
++                    1.0f, 2.0f);
 +#else
                  resolutionMultiplier = std::max(float((ext.sharedResources->swapChainHeight + referenceHeight - 1) / referenceHeight), 1.0f);
 +#endif
