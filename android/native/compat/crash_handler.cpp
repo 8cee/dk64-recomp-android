@@ -201,13 +201,13 @@ void install() {
         const int sig = kHandledSignals[i];
         if (sig >= 0 && sig < 32) {
             if (sigaction(sig, &action, &g_previous[sig]) != 0) {
-                ALOGE("crash handler: falha ao instalar handler para %s", signal_name(sig));
+                ALOGE("crash handler: failed to install handler for %s", signal_name(sig));
             }
         }
     }
 
     std::set_terminate(terminate_handler);
-    ALOGI("crash handler: instalado (SIGSEGV/SIGBUS/SIGFPE/SIGILL/SIGABRT + std::terminate)");
+    ALOGI("crash handler: installed (SIGSEGV/SIGBUS/SIGFPE/SIGILL/SIGABRT + std::terminate)");
 }
 
 } // namespace androidport::crash
