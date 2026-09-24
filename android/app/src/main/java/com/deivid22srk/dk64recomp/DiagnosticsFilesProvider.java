@@ -48,14 +48,14 @@ public class DiagnosticsFilesProvider extends ContentProvider {
     @Override
     public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
         if (mode != null && mode.contains("w")) {
-            throw new FileNotFoundException("Provider de diagnóstico é somente leitura");
+            throw new FileNotFoundException("Diagnostics provider is read-only");
         }
         File file = resolve(uri);
-        if (file == null) throw new FileNotFoundException("Log não encontrado: " + uri);
+        if (file == null) throw new FileNotFoundException("Log not found: " + uri);
         try {
             return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY);
         } catch (IOException e) {
-            throw new FileNotFoundException("Falha ao abrir " + file.getName() + ": " + e.getMessage());
+            throw new FileNotFoundException("Failed to open " + file.getName() + ": " + e.getMessage());
         }
     }
 
@@ -77,7 +77,7 @@ public class DiagnosticsFilesProvider extends ContentProvider {
 
     @Override
     public Uri insert(Uri uri, ContentValues values) {
-        throw new UnsupportedOperationException("Provider somente leitura");
+        throw new UnsupportedOperationException("Read-only provider");
     }
 
     @Override
