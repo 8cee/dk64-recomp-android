@@ -91,18 +91,18 @@ public final class DiagnosticsLogger {
     /** onCreate da MainActivity: inicia a sessão (se ativada) o mais cedo possível. */
     public static void onMainActivityCreate(Context ctx) {
         try {
-            if (isEnabled(ctx)) get().startSession(ctx.getApplicationContext(), "abertura do app");
+            if (isEnabled(ctx)) get().startSession(ctx.getApplicationContext(), "app launch");
         } catch (Throwable t) {
-            Log.w(TAG, "Diagnostics: falha ao iniciar sessão", t);
+            Log.w(TAG, "Diagnostics: failed to start session", t);
         }
     }
 
     /** onDestroy da MainActivity: encerra com resumo ANTES do killProcess. */
     public static void onMainActivityDestroy() {
         try {
-            get().endSession("app encerrado (onDestroy)");
+            get().endSession("app closed (onDestroy)");
         } catch (Throwable t) {
-            Log.w(TAG, "Diagnostics: falha ao encerrar sessão", t);
+            Log.w(TAG, "Diagnostics: failed to end session", t);
         }
     }
 
@@ -119,12 +119,12 @@ public final class DiagnosticsLogger {
             prefs(ctx.getApplicationContext()).edit()
                     .putBoolean(PREF_ENABLED, enabled).apply();
             if (enabled) {
-                get().startSession(ctx.getApplicationContext(), "ativada pelo usuário");
+                get().startSession(ctx.getApplicationContext(), "enabled by user");
             } else {
-                get().endSession("desativada pelo usuário");
+                get().endSession("disabled by user");
             }
         } catch (Throwable t) {
-            Log.w(TAG, "Diagnostics: falha ao mudar captura", t);
+            Log.w(TAG, "Diagnostics: failed to change capture state", t);
         }
     }
 
@@ -233,15 +233,15 @@ public final class DiagnosticsLogger {
                     reader.setDaemon(true);
                     reader.start();
                     s.reader = reader;
-                    writeMark("captura de logcat iniciada (pid=" + pid + ")");
+                    writeMark("logcat capture started (pid=" + pid + ")");
                 } catch (Throwable t) {
-                    Log.w(TAG, "Diagnostics: logcat indisponível — só lifecycle/crash", t);
-                    writeMark("AVISO: logcat indisponível (" + t.getMessage() + ")");
+                    Log.w(TAG, "Diagnostics: logcat unavailable — lifecycle/crash only", t);
+                    writeMark("WARNING: logcat unavailable (" + t.getMessage() + ")");
                 }
-                Log.i(TAG, "Diagnostics: sessão iniciada -> " + file.getName());
+                Log.i(TAG, "Diagnostics: session started -> " + file.getName());
                 pruneOldFiles(dir, file);
             } catch (Throwable t) {
-                Log.w(TAG, "Diagnostics: não foi possível iniciar a sessão", t);
+                Log.w(TAG, "Diagnostics: could not start session", t);
                 Session s = session;
                 session = null;
                 if (s != null) closeWriters(s);
@@ -275,7 +275,7 @@ public final class DiagnosticsLogger {
             session = null; // drainLogcat para; nenhum mark() novo entra
             try {
                 // Direto em `s` — o campo session já é null aqui.
-                writeLine(s, "---- [" + now() + "] fim da sessão: " + motivo + " ----\n", true);
+                writeLine(s, "---- [" + now() + "] end of session: " + motivo + " ----\n", true);
                 writeSummary(s, null);
             } catch (Throwable ignored) { }
             try {
@@ -289,7 +289,7 @@ public final class DiagnosticsLogger {
                     Thread.setDefaultUncaughtExceptionHandler(s.previousHandler);
                 }
             } catch (Throwable ignored) { }
-            Log.i(TAG, "Diagnostics: sessão encerrada -> " + s.file.getName());
+            Log.i(TAG, "Diagnostics: session ended -> " + s.file.getName());
         }
     }
 
@@ -300,19 +300,19 @@ public final class DiagnosticsLogger {
     private void writeHeader(Context appCtx, Session s, String motivo) throws IOException {
         StringBuilder b = new StringBuilder();
         b.append("================================================================\n");
-        b.append("DK64: Recompiled — LOG DE DIAGNÓSTICO\n");
-        b.append("Sessão iniciada : ").append(now()).append("\n");
-        b.append("Motivo          : ").append(motivo).append("\n");
+        b.append("DK64: Recompiled — DIAGNOSTIC LOG\n");
+        b.append("Session started : ").append(now()).append("\n");
+        b.append("Reason          : ").append(motivo).append("\n");
         b.append("App             : ").append(appVersion(appCtx)).append("\n");
-        b.append("Dispositivo     : ").append(Build.MANUFACTURER).append(' ')
+        b.append("Device          : ").append(Build.MANUFACTURER).append(' ')
                 .append(Build.MODEL).append(" — Android ").append(Build.VERSION.RELEASE)
                 .append(" (API ").append(Build.VERSION.SDK_INT).append(")\n");
-        b.append("Driver Vulkan   : ").append(driverInfo(appCtx)).append("\n");
-        b.append("Captura         : logcat do próprio processo (todas as tags/levels)\n");
-        b.append("Cobertura       : áudio, renderização (Vulkan/RT64/swapchain), driver,\n");
-        b.append("                  ciclo de vida, crashes. Gravação linha a linha:\n");
-        b.append("                  mesmo com fechamento à força, o que foi registrado\n");
-        b.append("                  até ali PERMANECE salvo neste arquivo.\n");
+        b.append("Vulkan driver   : ").append(driverInfo(appCtx)).append("\n");
+        b.append("Capture         : process logcat (all tags/levels)\n");
+        b.append("Coverage        : audio, rendering (Vulkan/RT64/swapchain), driver,\n");
+        b.append("                  lifecycle, crashes. Written line by line:\n");
+        b.append("                  even after a force-close, data already written\n");
+        b.append("                  remains saved in this file.\n");
         b.append("================================================================\n");
         writeLine(s, b.toString(), true);
     }
@@ -331,16 +331,16 @@ public final class DiagnosticsLogger {
         synchronized (LOCK) {
             StringBuilder b = new StringBuilder();
             b.append("\n================================================================\n");
-            b.append("!!! CRASH CAPTURADO !!!  [").append(now()).append("]\n");
+            b.append("!!! CRASH CAPTURED !!!  [").append(now()).append("]\n");
             b.append("Thread: ").append(thread.getName()).append("\n");
-            b.append("Exceção: ").append(t.getClass().getName())
+            b.append("Exception: ").append(t.getClass().getName())
                     .append(": ").append(t.getMessage()).append("\n");
             b.append("Stacktrace:\n");
             for (StackTraceElement e : t.getStackTrace()) b.append("  at ").append(e).append('\n');
             Throwable cause = t.getCause();
             int depth = 0;
             while (cause != null && depth < 5) {
-                b.append("Causado por: ").append(cause.getClass().getName())
+                b.append("Caused by: ").append(cause.getClass().getName())
                         .append(": ").append(cause.getMessage()).append('\n');
                 for (StackTraceElement e : cause.getStackTrace()) b.append("  at ").append(e).append('\n');
                 cause = cause.getCause();
@@ -357,23 +357,23 @@ public final class DiagnosticsLogger {
             try {
                 StringBuilder b = new StringBuilder();
                 b.append("\n================================================================\n");
-                b.append("RESUMO AUTOMÁTICO DA SESSÃO");
+                b.append("AUTOMATIC SESSION SUMMARY");
                 if (nota != null) b.append(" (").append(nota).append(')');
                 b.append('\n');
                 b.append(String.format(Locale.US,
-                        "Linhas capturadas: %d  (F:%d E:%d W:%d I:%d D:%d V:%d)\n",
+                        "Captured lines: %d  (F:%d E:%d W:%d I:%d D:%d V:%d)\n",
                         s.total, s.fCount, s.eCount, s.wCount, s.iCount, s.dCount, s.vCount));
-                if (s.capped) b.append("ATENÇÃO: captura interrompida por limite de tamanho (8 MB).\n");
+                if (s.capped) b.append("WARNING: capture stopped at the 8 MB size limit.\n");
                 if (s.errors.isEmpty() && s.warns.isEmpty()) {
-                    b.append("Nenhum erro (E/F) ou aviso (W) registrado nesta sessão.\n");
+                    b.append("No errors (E/F) or warnings (W) were recorded in this session.\n");
                 } else {
                     if (!s.errors.isEmpty()) {
-                        b.append("\nPROBLEMAS (erros E/F mais frequentes) — o primeiro é o\n");
-                        b.append("mais provável culpado; as linhas completas estão acima:\n");
+                        b.append("\nISSUES (most frequent E/F errors) — the first is the\n");
+                        b.append("most likely cause; full lines are shown above:\n");
                         dumpTop(s, b, s.errors);
                     }
                     if (!s.warns.isEmpty()) {
-                        b.append("\nAVISOS (W) mais frequentes:\n");
+                        b.append("\nMost frequent WARNINGS (W):\n");
                         dumpTop(s, b, s.warns);
                     }
                 }
@@ -401,7 +401,7 @@ public final class DiagnosticsLogger {
             s.capped = true;
             try {
                 s.writer.flush();
-                s.writer.write("\n[CAPTURA PAUSADA: limite de 8 MB desta sessão atingido]\n");
+                s.writer.write("\n[CAPTURE PAUSED: this session reached the 8 MB limit]\n");
                 s.writer.flush();
             } catch (Throwable ignored) { }
         }
@@ -514,7 +514,7 @@ public final class DiagnosticsLogger {
                     .getPackageInfo(ctx.getPackageName(), 0);
             return pi.versionName + " (versionCode " + pi.versionCode + ")";
         } catch (Throwable t) {
-            return "desconhecida";
+            return "unknown";
         }
     }
 
@@ -534,10 +534,10 @@ public final class DiagnosticsLogger {
                 }
                 sc.close();
                 String v = b.toString();
-                return v.isEmpty() ? "padrão do sistema (selected.txt vazio)"
+                return v.isEmpty() ? "system default (selected.txt empty)"
                                    : (v.length() > 300 ? v.substring(0, 300) + "…" : v);
             }
         } catch (Throwable ignored) { }
-        return "padrão do sistema (nenhum driver custom instalado)";
+        return "system default (no custom driver installed)";
     }
 }
