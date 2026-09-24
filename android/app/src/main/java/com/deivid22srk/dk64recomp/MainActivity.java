@@ -86,11 +86,15 @@ public class MainActivity extends SDLActivity {
     private static final int KIND_MOD = 2;
     /** Kind::ModsFolder do file_bridge.h — abre a pasta mods no gerenciador. */
     private static final int KIND_MODS_FOLDER = 3;
+    private static final int KIND_SAVE_EXPORT = 4;
+    private static final int KIND_SAVE_IMPORT = 5;
 
     private static final int PICK_ROM_REQUEST = 0xD864;
     private static final int PICK_DRIVER_REQUEST = 0xADF1;
     private static final int PICK_MOD_REQUEST = 0x4D0D;
     private static final int PICK_MODS_FOLDER_REQUEST = 0xFA7D;
+    private static final int PICK_SAVE_EXPORT_REQUEST = 0x5A4E;
+    private static final int PICK_SAVE_IMPORT_REQUEST = 0x5A4F;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -242,6 +246,8 @@ public class MainActivity extends SDLActivity {
             case PICK_ROM_REQUEST: kind = KIND_ROM; break;
             case PICK_DRIVER_REQUEST: kind = KIND_DRIVER; break;
             case PICK_MOD_REQUEST: kind = KIND_MOD; break;
+            case PICK_SAVE_EXPORT_REQUEST: kind = KIND_SAVE_EXPORT; break;
+            case PICK_SAVE_IMPORT_REQUEST: kind = KIND_SAVE_IMPORT; break;
             case PICK_MODS_FOLDER_REQUEST: {
                 // A pasta mods foi apenas exibida no gerenciador do sistema
                 // (ACTION_OPEN_DOCUMENT_TREE): nada a processar, publica o
@@ -291,6 +297,37 @@ public class MainActivity extends SDLActivity {
                         sb.append(path);
                     }
                     payload = sb.toString();
+                    ok = true;
+                } else if (kind == KIND_SAVE_EXPORT) {
+                    File src = new File(appContext.getFilesDir(), "saves/DK64.bin");
+                    if (!src.isFile()) {
+                        payload = "No DK64 save exists yet.";
+                    } else {
+                        try (java.io.InputStream in = new java.io.FileInputStream(src);
+                             java.io.OutputStream out = appContext.getContentResolver().openOutputStream(uri, "w")) {
+                            if (out == null) throw new java.io.IOException("Could not open destination.");
+                            byte[] buf = new byte[8192]; int n;
+                            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                        }
+                        payload = "DK64 save exported successfully.";
+                        ok = true;
+                    }
+                } else if (kind == KIND_SAVE_IMPORT) {
+                    File dir = new File(appContext.getFilesDir(), "saves");
+                    if (!dir.exists() && !dir.mkdirs()) throw new java.io.IOException("Could not create saves directory.");
+                    File dst = new File(dir, "DK64.bin");
+                    File tmp = new File(dir, "DK64.bin.import");
+                    try (java.io.InputStream in = appContext.getContentResolver().openInputStream(uri);
+                         java.io.OutputStream out = new java.io.FileOutputStream(tmp)) {
+                        if (in == null) throw new java.io.IOException("Could not open selected save.");
+                        byte[] buf = new byte[8192]; int n; long total = 0;
+                        while ((n = in.read(buf)) > 0) { out.write(buf, 0, n); total += n; }
+                        if (total != 0x800) throw new java.io.IOException("Invalid DK64 save size: " + total + " bytes (expected 2048).");
+                    }
+                    File bak = new File(dir, "DK64.bin.bak");
+                    if (dst.isFile()) java.nio.file.Files.copy(dst.toPath(), bak.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    java.nio.file.Files.move(tmp.toPath(), dst.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    payload = "DK64 save imported. Restart the app before playing.";
                     ok = true;
                 } else if (kind == KIND_ROM) {
                     payload = SafFiles.copyRomToFilesDir(appContext, uri);
@@ -358,6 +395,19 @@ public class MainActivity extends SDLActivity {
                                                 + activity.getPackageName()
                                                 + "/files/mods"));
                         requestCode = PICK_MODS_FOLDER_REQUEST;
+                        break;
+                    case KIND_SAVE_EXPORT:
+                        intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                        intent.addCategory(Intent.CATEGORY_OPENABLE);
+                        intent.setType("application/octet-stream");
+                        intent.putExtra(Intent.EXTRA_TITLE, "DK64.bin");
+                        requestCode = PICK_SAVE_EXPORT_REQUEST;
+                        break;
+                    case KIND_SAVE_IMPORT:
+                        intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                        intent.addCategory(Intent.CATEGORY_OPENABLE);
+                        intent.setType("*/*");
+                        requestCode = PICK_SAVE_IMPORT_REQUEST;
                         break;
                     case KIND_MOD:
                         // Instalação de mods: seleção MÚLTIPLA de .nrm/.rtz/zip.
