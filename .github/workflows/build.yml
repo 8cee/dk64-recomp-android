@@ -3,11 +3,13 @@ name: build
 # Build do APK Android a cada push (e manualmente via workflow_dispatch).
 # Fluxo: codegen no host (N64Recomp/RSPRecomp/patches com a ROM do release
 # `build-inputs` do repo PRIVADO `dk64-recomp-build-inputs`, baixado via
-# secret PRIVATE_REPO_TOKEN) -> Gradle + NDK -> APK debug assinado.
+# secret PRIVATE_REPO_TOKEN) -> Gradle + NDK -> APK release com assinatura persistente.
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+      - 'r8-*'
   workflow_dispatch:
 
 concurrency:
@@ -27,12 +29,24 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Init submódulos necessários (vcpkg não é usado no build Android)
+      - name: Init e verificar submódulos necessários
         run: |
           set -euo pipefail
           git submodule update --init --recursive --depth 1 \
             lib/rt64 lib/N64ModernRuntime lib/RecompFrontend lib/dk64_decomp lib/adrenotools
           git submodule status
+
+          EXPECTED_RT64=e437f2a5010b813cf5827b84fa249997ea910903
+          EXPECTED_RUNTIME=8fe786b52177d087821cf3affb85296f663b508d
+          ACTUAL_RT64=$(git -C lib/rt64 rev-parse HEAD)
+          ACTUAL_RUNTIME=$(git -C lib/N64ModernRuntime rev-parse HEAD)
+          [ "$ACTUAL_RT64" = "$EXPECTED_RT64" ] || {
+            echo "::error::RT64 errado: $ACTUAL_RT64 (esperado $EXPECTED_RT64)"; exit 1;
+          }
+          [ "$ACTUAL_RUNTIME" = "$EXPECTED_RUNTIME" ] || {
+            echo "::error::N64ModernRuntime errado: $ACTUAL_RUNTIME (esperado $EXPECTED_RUNTIME)"; exit 1;
+          }
+          echo "Submodule pins OK"
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
@@ -50,29 +64,27 @@ jobs:
       - name: Baixar ROM de input (release asset em repo privado) e validar
         env:
           GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          CONFIGURED_INPUT_REPO: ${{ vars.BUILD_INPUTS_REPO }}
         run: |
           set -euo pipefail
           if [ -z "${GH_TOKEN}" ]; then
-            echo "::error::Secret PRIVATE_REPO_TOKEN ausente — crie um PAT com acesso de leitura ao repo privado de inputs e defina o secret (ver scripts/setup-build-inputs-repo.sh)."
+            echo "::error::Secret PRIVATE_REPO_TOKEN ausente — rode scripts/setup-build-inputs-repo.sh no seu fork."
             exit 1
           fi
+          INPUT_REPO="${CONFIGURED_INPUT_REPO:-${GITHUB_REPOSITORY_OWNER}/dk64-recomp-build-inputs}"
+          echo "Build inputs: $INPUT_REPO"
           mkdir -p rom-input
-          gh release download build-inputs --repo deivid22srk/dk64-recomp-build-inputs \
+          gh release download build-inputs --repo "$INPUT_REPO" \
             --pattern 'Donkey.Kong.64.zip' --output rom-input/Donkey.Kong.64.zip --clobber
           cd rom-input
           unzip -o Donkey.Kong.64.zip
-          ROMS=$(find . -maxdepth 2 -iname '*.z64' -o -iname '*.n64' -o -iname '*.v64' | wc -l)
+          ROMS=$(find . -maxdepth 2 -type f \( -iname '*.z64' -o -iname '*.n64' -o -iname '*.v64' \) | wc -l)
           if [ "$ROMS" -ne 1 ]; then
             echo "::error::Esperava exatamente 1 ROM no zip, achei $ROMS"
             exit 1
           fi
-          ROM_FILE=$(find . -maxdepth 2 -iname '*.z64' -o -iname '*.n64' -o -iname '*.v64' | head -1)
-          SHA1=$(sha1sum "$ROM_FILE" | cut -d' ' -f1)
-          echo "ROM sha1: $SHA1"
-          if [ "$SHA1" != "cf806ff2603640a748fca5026ded28802f1f4a50" ]; then
-            echo "::error::ROM incorreta (esperado NTSC-U 1.0, sha1 cf806ff2...)"
-            exit 1
-          fi
+          ROM_FILE=$(find . -maxdepth 2 -type f \( -iname '*.z64' -o -iname '*.n64' -o -iname '*.v64' \) | head -1)
+          python3 ../scripts/normalize-dk64-rom.py "$ROM_FILE" dk64.us.z64
 
       - name: Build N64Recomp & RSPRecomp (host)
         run: |
@@ -89,7 +101,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p rom-work
-          cp rom-input/*.z64 rom-work/baserom.us.z64
+          cp rom-input/dk64.us.z64 rom-work/baserom.us.z64
           ( cd rom-work && python3 ../lib/dk64_decomp/tools/generate_decompressed_rom.py )
           cp rom-work/baserom.us.decompressed.z64 donkeykong64.decompressed.us.z64
           ls -la donkeykong64.decompressed.us.z64
@@ -115,36 +127,83 @@ jobs:
       - name: Aplicar patches de port nos submódulos
         run: |
           set -euo pipefail
+          git -C lib/rt64 apply --check ../../android/patches/rt64-android.patch
+          git -C lib/rt64/src/contrib/plume apply --check ../../../../../android/patches/plume-android.patch
+          git -C lib/rt64/src/contrib/zstd apply --check ../../../../../android/patches/zstd-android.patch
+          git -C lib/N64ModernRuntime apply --check ../../android/patches/n64modernruntime-android.patch
+          git -C lib/RecompFrontend apply --check ../../android/patches/recompfrontend-android.patch
+
           git -C lib/rt64 apply --verbose ../../android/patches/rt64-android.patch
           git -C lib/rt64/src/contrib/plume apply --verbose ../../../../../android/patches/plume-android.patch
           git -C lib/rt64/src/contrib/zstd apply --verbose ../../../../../android/patches/zstd-android.patch
           git -C lib/N64ModernRuntime apply --verbose ../../android/patches/n64modernruntime-android.patch
           git -C lib/RecompFrontend apply --verbose ../../android/patches/recompfrontend-android.patch
 
-      - name: Build APK (Gradle + NDK)
+      - name: Verificar secrets da assinatura persistente
         run: |
           set -euo pipefail
+          for s in ANDROID_RELEASE_KEYSTORE_B64 ANDROID_RELEASE_KEYSTORE_PASSWORD ANDROID_RELEASE_KEY_ALIAS ANDROID_RELEASE_KEY_PASSWORD; do
+            case "$s" in
+              ANDROID_RELEASE_KEYSTORE_B64) v='${{ secrets.ANDROID_RELEASE_KEYSTORE_B64 }}' ;;
+              ANDROID_RELEASE_KEYSTORE_PASSWORD) v='${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}' ;;
+              ANDROID_RELEASE_KEY_ALIAS) v='${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}' ;;
+              ANDROID_RELEASE_KEY_PASSWORD) v='${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}' ;;
+            esac
+            [ -n "$v" ] || { echo "::error::Secret $s ausente — rode scripts/setup-ci-signing.sh uma vez."; exit 1; }
+          done
+
+      - name: Build APK release assinado (Gradle + NDK)
+        env:
+          ANDROID_RELEASE_KEYSTORE_B64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_B64 }}
+          ANDROID_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+          ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+          ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KS="$RUNNER_TEMP/release.keystore"
+          echo "$ANDROID_RELEASE_KEYSTORE_B64" | base64 -d > "$KS"
+          keytool -list -keystore "$KS" \
+            -storepass "$ANDROID_RELEASE_KEYSTORE_PASSWORD" \
+            -alias "$ANDROID_RELEASE_KEY_ALIAS" >/dev/null
+          export ANDROID_RELEASE_KEYSTORE_FILE="$KS"
           cd android
-          ./gradlew assembleDebug --no-daemon --stacktrace \
+          ./gradlew assembleRelease --no-daemon --stacktrace \
             -PHOST_FILE_TO_C="$GITHUB_WORKSPACE/build-filetoc/file_to_c"
 
-      - name: Verificar conteúdo do APK (hooks do adrenotools empacotados)
+      - name: Verificar APK r8, renderer e assinatura
         run: |
           set -euo pipefail
-          APK=android/app/build/outputs/apk/debug/app-debug.apk
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          [ -f "$APK" ] || { echo "::error::APK release ausente"; exit 1; }
           unzip -l "$APK" > /tmp/apk-list.txt
-          cat /tmp/apk-list.txt
-          for lib in libmain.so libmain_hook.so libhook_impl.so libfile_redirect_hook.so; do
-            if ! grep -q "lib/arm64-v8a/$lib" /tmp/apk-list.txt; then
-              echo "::error::$lib ausente do APK — hooks do adrenotools não foram empacotados"
-              exit 1
-            fi
+          for lib in libgame.so libmain.so libmain_hook.so libhook_impl.so libfile_redirect_hook.so; do
+            grep -q "lib/arm64-v8a/$lib" /tmp/apk-list.txt || {
+              echo "::error::$lib ausente do APK"; exit 1;
+            }
           done
-          echo "APK OK: libmain.so + hooks do adrenotools presentes"
 
-      - name: Upload do APK
+          unzip -p "$APK" lib/arm64-v8a/libmain.so > /tmp/libmain.so
+          strings /tmp/libmain.so | grep -q 'renderer_compat.txt' || {
+            echo "::error::renderer_compat.txt não está compilado no libmain.so"; exit 1;
+          }
+          strings /tmp/libmain.so | grep -q 'DK64_RENDERER_COMPAT' || {
+            echo "::error::DK64_RENDERER_COMPAT não está compilado no libmain.so"; exit 1;
+          }
+          grep -Eq '"versionName"[[:space:]]*:[[:space:]]*"1\.0\.3-android-r8"' android/app/build/outputs/apk/release/output-metadata.json || {
+            echo "::error::versionName do APK não é 1.0.3-android-r8"; cat android/app/build/outputs/apk/release/output-metadata.json; exit 1;
+          }
+
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs "$APK" | tee /tmp/certs.txt
+          grep -q 'CN=DK64 Recompiled Android' /tmp/certs.txt || {
+            echo "::error::APK não usa a assinatura persistente DK64 Recompiled Android"; exit 1;
+          }
+          sha256sum "$APK"
+          echo "APK r8 full-fidelity verificado"
+
+      - name: Upload do APK r8 full-fidelity
         uses: actions/upload-artifact@v4
         with:
-          name: dk64recomp-android-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: dk64recomp-android-r8-full-fidelity
+          path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
