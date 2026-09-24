@@ -98,6 +98,27 @@ index 79dfc38..8d57049
  build_compute_shader(rt64 "src/shaders/FbChangesClearCS.hlsl")
  build_pixel_shader(  rt64 "src/shaders/FbChangesDrawColorPS.hlsl")
  build_pixel_shader(  rt64 "src/shaders/FbChangesDrawDepthPS.hlsl")
+diff --git a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
+index 0000000..0000000 100644
+--- a/src/hle/rt64_workload_queue.cpp
++++ b/src/hle/rt64_workload_queue.cpp
+@@ -188,7 +188,15 @@
+         switch (resolutionMode) {
+         case UserConfiguration::Resolution::WindowIntegerScale:
+             if (ext.sharedResources->swapChainHeight > 0) {
++#if defined(__ANDROID__)
++                // Android surfaces commonly have non-integer usable heights because of
++                // cutouts/system insets. Never choose an integer scale that is larger
++                // than the actual swapchain: the upstream ceil() path can turn a
++                // ~1080px surface into 5x (1200px), which corrupts framebuffer effects
++                // on several mobile Vulkan drivers. Keep Auto integer-scaled, but fit.
++                resolutionMultiplier = std::max(float(ext.sharedResources->swapChainHeight / referenceHeight), 1.0f);
++#else
+                 resolutionMultiplier = std::max(float((ext.sharedResources->swapChainHeight + referenceHeight - 1) / referenceHeight), 1.0f);
++#endif
+             }
+             else {
+                 resolutionMultiplier = 1.0f;
 diff --git a/src/hle/rt64_application_window.cpp b/src/hle/rt64_application_window.cpp
 index 08f83e5..6347b98 100755
 --- a/src/hle/rt64_application_window.cpp
