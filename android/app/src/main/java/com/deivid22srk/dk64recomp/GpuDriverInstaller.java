@@ -233,7 +233,7 @@ public final class GpuDriverInstaller {
                     + "meta.json, Winlator/Turnip zip or a bare .so); see logcat "
                     + "(tag DK64Recomp) for the exact reason.";
         } catch (Exception ex) {
-            Log.w(TAG, "Probe JSON inválido", ex);
+            Log.w(TAG, "Invalid probe JSON", ex);
             return "Driver \"" + friendlyName + "\" installed (probe unavailable).\n\n"
                     + "The app will now restart to load the new driver.";
         }
