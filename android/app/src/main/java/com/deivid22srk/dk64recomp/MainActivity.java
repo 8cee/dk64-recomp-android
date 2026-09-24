@@ -674,7 +674,7 @@ public class MainActivity extends SDLActivity {
      */
     public static void handleNativeAppRestart() {
         Log.i(TAG, "handleNativeAppRestart: finishing Activity for restart "
-                + (state requires a new process — Vulkan driver or new ROM; "
+                + "(state requires a new process — Vulkan driver or new ROM; "
                 + "the app will be reopened by the launcher)");
         final SDLActivity activity = mSingleton;
         if (activity == null || activity.isFinishing()) {
