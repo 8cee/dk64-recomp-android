@@ -540,7 +540,7 @@ index 721a01e..6ab7443
      // OptimizerCacheSPIRV
  
      void OptimizerCacheSPIRV::initialize() {
-@@ -74,16 +240,106 @@ namespace RT64 {
+@@ -74,16 +240,116 @@ namespace RT64 {
          rasterPSMS.parse(RasterPSSpecConstantMSBlobSPIRV, std::size(RasterPSSpecConstantMSBlobSPIRV));
          rasterPSFlat.parse(RasterPSSpecConstantFlatBlobSPIRV, std::size(RasterPSSpecConstantFlatBlobSPIRV));
          rasterPSFlatMS.parse(RasterPSSpecConstantFlatMSBlobSPIRV, std::size(RasterPSSpecConstantFlatMSBlobSPIRV));
@@ -603,6 +603,16 @@ index 721a01e..6ab7443
 +            // (Qualcomm proprietary gate in plume). Skip the probe so no pipeline
 +            // creation attempt is ever allowed to fail on it.
 +            fprintf(stderr, "RT64: driver reported as unreliable for flat shaded varyings. Flat decorations will be stripped from raster shaders.\n");
++            return;
++        }
++
++        // Fidelity path: the backend capability decision is authoritative. The old
++        // extra probe could turn a modern driver that had already been classified as
++        // reliable into the degraded interpolation path after a single transient
++        // pipeline-creation failure. Keep the normal flat varyings here; legacy mode
++        // still reaches the stripping path above through flatShadingReliable=false.
++        if (device->getCapabilities().uberShaderReliable) {
++            fprintf(stderr, "RT64: backend marked flat shading/uber shaders reliable; keeping full-fidelity varyings.\n");
 +            return;
 +        }
 +
@@ -726,7 +736,7 @@ index 721a01e..6ab7443
          }
          else if (shaderFormat == RenderShaderFormat::METAL) {
  #       ifdef __APPLE__
-@@ -237,6 +539,219 @@ namespace RT64 {
+@@ -237,6 +539,228 @@ namespace RT64 {
  #endif
          creation.multisampling = multisampling;
          pipeline = createPipeline(creation);
@@ -813,7 +823,16 @@ index 721a01e..6ab7443
 +                    dualSourceActive = false;
 +                }
 +
-+                if (!dualSourceActive && ((pipeline == nullptr) || !pipeline->isValid())) {
++                // When the uber renderer is reliable, do NOT adopt SAFE/SOLID here.
++                // Those permutations intentionally remove derivatives/LOD behavior
++                // (and SOLID removes textures), so accepting them creates exactly the
++                // water/material/character corruption we're trying to eliminate. Let
++                // FramebufferRenderer fall back to the already-valid uber pipeline.
++                if (device->getCapabilities().uberShaderReliable && ((pipeline == nullptr) || !pipeline->isValid())) {
++                    fprintf(stderr, "RT64: full renderer path kept specialized shader invalid; draw will use the uber pipeline instead of SAFE/SOLID.\n");
++                }
++
++                if (!device->getCapabilities().uberShaderReliable && !dualSourceActive && ((pipeline == nullptr) || !pipeline->isValid())) {
 +                    const respv::Shader *safePS = desc.flags.smoothShade ? &optimizerCacheSPIRV->rasterPSSafe : &optimizerCacheSPIRV->rasterPSSafeFlat;
 +                    size_t safeSize = 0;
 +                    std::unique_ptr<RenderShader> safeShader = createSpecializedPixelShader(device, shaderFormat, *safePS, desc, &safeSize);
@@ -843,7 +862,7 @@ index 721a01e..6ab7443
 +                    }
 +                }
 +
-+                if ((pipeline == nullptr) || !pipeline->isValid()) {
++                if (!device->getCapabilities().uberShaderReliable && ((pipeline == nullptr) || !pipeline->isValid())) {
 +                    // Port DK64-Recomp Android: driver sulk mitigation. A failed shader
 +                    // compilation can leave the Qualcomm compiler in a state where the
 +                    // next creation fails too, which would knock the fallback rungs out
@@ -877,7 +896,7 @@ index 721a01e..6ab7443
 +                }
 +            }
 +
-+            if ((pipeline == nullptr) || !pipeline->isValid()) {
++            if (!device->getCapabilities().uberShaderReliable && ((pipeline == nullptr) || !pipeline->isValid())) {
 +                // Port DK64-Recomp Android: canary diagnostics, run only when every
 +                // fallback rung failed (including the warm-up retry), so they don't
 +                // pollute the log of healthy degradations. Retry the creation with
