@@ -264,6 +264,13 @@ add_subdirectory("${REPO_ROOT}/lib/adrenotools" "${CMAKE_BINARY_DIR}/adrenotools
 # ----------------------------------------------------------------------------
 add_subdirectory("${RT64_DIR}" "${CMAKE_BINARY_DIR}/rt64")
 add_subdirectory("${NMR_DIR}" "${CMAKE_BINARY_DIR}/N64ModernRuntime")
+# Android code mods use N64Recomp's SLJIT live recompiler. The upstream SLJIT
+# default POSIX allocator requests RWX memory in one mmap(), which modern
+# Android blocks. Use SLJIT's W^X allocator instead: generate in RW pages,
+# then switch them to RX before executing.
+if(TARGET LiveRecomp)
+    target_compile_definitions(LiveRecomp PRIVATE SLJIT_WX_EXECUTABLE_ALLOCATOR=1)
+endif()
 set(RECOMP_FRONTEND_N64MODERNRUNTIME_PATH "${NMR_DIR}")
 set(RECOMP_FRONTEND_RT64_PATH "${RT64_DIR}")
 add_subdirectory("${FRONTEND_DIR}" "${CMAKE_BINARY_DIR}/RecompFrontend")
