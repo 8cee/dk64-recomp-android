@@ -65,22 +65,19 @@ public class DiagnosticsActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         // Título
-        root.addView(label("Logs e diagnóstico", 22, Typeface.BOLD));
+        root.addView(label("Logs & Diagnostics", 22, Typeface.BOLD));
 
         // Explicação
         TextView expl = label(
-                "Neste build de auditoria r8, a captura vem ATIVADA por padrão para "
-                        + "registrar a primeira execução automaticamente. Você pode desligá-la "
-                        + "abaixo a qualquer momento (não precisa reabrir "
-                        + "o app). Com a captura ATIVADA, todo o log do jogo é registrado "
-                        + "em um arquivo (áudio, renderização Vulkan/RT64, driver, ciclo "
-                        + "de vida e crashes), linha a linha. Se o app fechar à força ou "
-                        + "crashear, o que foi registrado até ali permanece salvo, e cada "
-                        + "sessão termina com um RESUMO dos erros e avisos mais frequentes "
-                        + "— deixando claro onde está o problema.\n\n"
-                        + "Os arquivos ficam em: Android/data/" + getPackageName()
-                        + "/files/diagnostics (ou no armazenamento interno do app, se o "
-                        + "externo não estiver disponível).",
+                "This audit build captures logs by default so the first run is recorded automatically. "
+                        + "You can turn logging off below at any time without restarting the app. "
+                        + "When capture is enabled, the game log is written line by line, including "
+                        + "audio, Vulkan/RT64 rendering, driver, lifecycle and crash information. "
+                        + "If the app is force-closed or crashes, everything written up to that point "
+                        + "remains saved, and each normal session ends with a summary of the most common "
+                        + "errors and warnings.\n\n"
+                        + "Files are stored in: Android/data/" + getPackageName()
+                        + "/files/diagnostics (or the app's internal storage if external storage is unavailable).",
                 14, Typeface.NORMAL);
         root.addView(expl);
 
@@ -88,7 +85,7 @@ public class DiagnosticsActivity extends Activity {
 
         // Toggle ON/OFF
         Switch toggle = new Switch(this);
-        toggle.setText("Capturar logs");
+        toggle.setText("Capture logs");
         toggle.setTextSize(17);
         toggle.setTextColor(Color.WHITE);
         toggle.setChecked(DiagnosticsLogger.isEnabled(this));
@@ -108,7 +105,7 @@ public class DiagnosticsActivity extends Activity {
 
         // Renderer A/B test controls. The native side reads renderer_compat.txt
         // during the next process start, before plume creates the Vulkan device.
-        root.addView(label("Modo do renderer (aplica na próxima execução)", 15, Typeface.BOLD));
+        root.addView(label("Renderer mode (applies on next launch)", 15, Typeface.BOLD));
         rendererModeText = label("", 14, Typeface.NORMAL);
         root.addView(rendererModeText);
 
@@ -135,21 +132,21 @@ public class DiagnosticsActivity extends Activity {
         rendererButtons.addView(rendererLegacy);
 
         root.addView(rendererButtons);
-        root.addView(label("Depois de mudar o modo, feche completamente e reabra o jogo. "
-                + "Auto = detecção por GPU; Full = caminho normal; Legacy = compatibilidade Adreno 6xx.",
+        root.addView(label("After changing the mode, fully close and reopen the game. "
+                + "Auto = GPU detection; Full = normal path; Legacy = Adreno 6xx compatibility.",
                 13, Typeface.NORMAL));
 
         root.addView(spacer(12));
 
         // Compartilhar sessão atual
         Button shareCurrent = new Button(this);
-        shareCurrent.setText("Compartilhar log da sessão atual");
+        shareCurrent.setText("Share current session log");
         shareCurrent.setOnClickListener(v -> {
             File cur = DiagnosticsLogger.currentSessionFile();
             if (cur == null) {
                 List<File> files = DiagnosticsLogger.listLogFiles(this);
                 if (!files.isEmpty()) share(files.get(0));
-                else toastStatus("Nenhum log disponível — ative a captura e use o jogo um pouco.");
+                else toastStatus("No logs available yet — enable capture and use the game for a while.");
             } else {
                 share(cur);
             }
@@ -159,7 +156,7 @@ public class DiagnosticsActivity extends Activity {
         root.addView(spacer(16));
 
         // Lista de sessões recentes
-        root.addView(label("Sessões recentes (toque = compartilhar; segurar = apagar)", 15, Typeface.BOLD));
+        root.addView(label("Recent sessions (tap = share; hold = delete)", 15, Typeface.BOLD));
         fileListContainer = new LinearLayout(this);
         fileListContainer.setOrientation(LinearLayout.VERTICAL);
         root.addView(fileListContainer);
@@ -181,18 +178,17 @@ public class DiagnosticsActivity extends Activity {
         boolean enabled = DiagnosticsLogger.isEnabled(this);
 
         if (rendererModeText != null) {
-            rendererModeText.setText("Próxima execução: " + readRendererMode().toUpperCase(Locale.US));
+            rendererModeText.setText("Next launch: " + readRendererMode().toUpperCase(Locale.US));
         }
 
         if (statusText != null) {
             if (enabled && current != null) {
-                statusText.setText("Captura ATIVA — sessão atual: " + current.getName()
+                statusText.setText("Capture ON — current session: " + current.getName()
                         + " (" + humanSize(current.length()) + ")");
             } else if (!enabled) {
-                statusText.setText("Captura DESATIVADA — nenhum problema será registrado.");
+                statusText.setText("Capture OFF — diagnostic events will not be recorded.");
             } else {
-                statusText.setText("Captura ativada — a sessão começa no próximo "
-                        + "início do app.");
+                statusText.setText("Capture enabled — the session starts on the next app launch.");
             }
         }
 
@@ -213,7 +209,7 @@ public class DiagnosticsActivity extends Activity {
             shown++;
         }
         if (shown == 0) {
-            TextView none = label("Nenhum log ainda.", 13, Typeface.ITALIC);
+            TextView none = label("No logs yet.", 13, Typeface.ITALIC);
             fileListContainer.addView(none);
         }
     }
@@ -227,21 +223,21 @@ public class DiagnosticsActivity extends Activity {
             send.putExtra(Intent.EXTRA_STREAM,
                     DiagnosticsFilesProvider.shareUri(this, log.getName()));
             send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            startActivity(Intent.createChooser(send, "Compartilhar log"));
+            startActivity(Intent.createChooser(send, "Share log"));
         } catch (Throwable t) {
-            toastStatus("Falha ao compartilhar: " + t.getMessage());
+            toastStatus("Failed to share: " + t.getMessage());
         }
     }
 
     private void confirmDelete(File log) {
         new AlertDialog.Builder(this)
-                .setTitle("Apagar log")
-                .setMessage("Apagar " + log.getName() + "?")
-                .setPositiveButton("Apagar", (d, w) -> {
+                .setTitle("Delete log")
+                .setMessage("Delete " + log.getName() + "?")
+                .setPositiveButton("Delete", (d, w) -> {
                     try { log.delete(); } catch (Throwable ignored) { }
                     refresh();
                 })
-                .setNegativeButton("Cancelar", null)
+                .setNegativeButton("Cancel", null)
                 .show();
     }
 
@@ -301,8 +297,8 @@ public class DiagnosticsActivity extends Activity {
 
         String selected = readRendererMode();
         if (rendererModeText != null) {
-            rendererModeText.setText("Próxima execução: " + selected.toUpperCase(Locale.US)
-                    + (ok ? " — feche e reabra o jogo" : " — houve erro ao gravar a configuração"));
+            rendererModeText.setText("Next launch: " + selected.toUpperCase(Locale.US)
+                    + (ok ? " — fully close and reopen the game" : " — failed to save the setting"));
         }
     }
 
