@@ -17,8 +17,8 @@ android {
         applicationId = "com.eightcee.dk64recomp"
         minSdk = 26
         targetSdk = 34
-        versionCode = 10
-        versionName = "1.0.3-android-r10"
+        versionCode = 11
+        versionName = "1.0.3-android-r11"
 
         ndk {
             // 64-bit apenas (decisão do usuário: memória e tempo de build)
