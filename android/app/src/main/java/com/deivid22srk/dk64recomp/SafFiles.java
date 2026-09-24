@@ -79,7 +79,7 @@ final class SafFiles {
 
         File dir = modsStagingDir(ctx);
         if (!dir.exists() && !dir.mkdirs()) {
-            throw new IOException("Não foi possível criar o diretório de staging de mods.");
+            throw new IOException("Could not create the mod staging directory.");
         }
 
         File dest = new File(dir, name);
@@ -88,13 +88,13 @@ final class SafFiles {
         try {
             try (InputStream in = ctx.getContentResolver().openInputStream(uri);
                  OutputStream out = new FileOutputStream(tmp)) {
-                if (in == null) throw new IOException("Não foi possível abrir o arquivo selecionado.");
+                if (in == null) throw new IOException("Could not open the selected file.");
                 byte[] buf = new byte[1 << 16];
                 long total = 0;
                 int n;
                 while ((n = in.read(buf)) > 0) {
                     total += n;
-                    if (total > MAX_MOD_BYTES) throw new IOException("Arquivo maior que 512 MB.");
+                    if (total > MAX_MOD_BYTES) throw new IOException("File is larger than 512 MB.");
                     out.write(buf, 0, n);
                 }
             }
@@ -111,7 +111,7 @@ final class SafFiles {
         } finally {
             tmp.delete(); // limpa resíduo em qualquer falha (rename OK = no-op)
         }
-        Log.i(TAG, "Mod copiado para " + dest.getAbsolutePath());
+        Log.i(TAG, "Mod copied to " + dest.getAbsolutePath());
         return dest.getAbsolutePath();
     }
 
@@ -154,13 +154,13 @@ final class SafFiles {
         try {
             try (InputStream in = ctx.getContentResolver().openInputStream(uri);
                  OutputStream out = new FileOutputStream(tmp)) {
-                if (in == null) throw new IOException("Não foi possível abrir o arquivo selecionado.");
+                if (in == null) throw new IOException("Could not open the selected file.");
                 byte[] buf = new byte[1 << 16];
                 long total = 0;
                 int n;
                 while ((n = in.read(buf)) > 0) {
                     total += n;
-                    if (total > MAX_ROM_BYTES) throw new IOException("Arquivo maior que 64 MB.");
+                    if (total > MAX_ROM_BYTES) throw new IOException("File is larger than 64 MB.");
                     out.write(buf, 0, n);
                 }
             }
@@ -177,7 +177,7 @@ final class SafFiles {
         } finally {
             tmp.delete(); // limpa resíduo em qualquer falha (rename OK = no-op)
         }
-        Log.i(TAG, "ROM copiada para " + dest.getAbsolutePath());
+        Log.i(TAG, "ROM copied to " + dest.getAbsolutePath());
         return dest.getAbsolutePath();
     }
 }
