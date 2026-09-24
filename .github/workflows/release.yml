@@ -75,7 +75,7 @@ jobs:
             echo "::error::Secret PRIVATE_REPO_TOKEN ausente — rode scripts/setup-build-inputs-repo.sh no seu fork."
             exit 1
           fi
-          INPUT_REPO="${CONFIGURED_INPUT_REPO:-${GITHUB_REPOSITORY_OWNER}/dk64-recomp-build-inputs}"
+          INPUT_REPO="${CONFIGURED_INPUT_REPO:-8cee/8cee-dk64-recomp-build-inputs}"
           echo "Build inputs: $INPUT_REPO"
           mkdir -p rom-input
           gh release download build-inputs --repo "$INPUT_REPO" \
