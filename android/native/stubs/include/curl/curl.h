@@ -1,12 +1,11 @@
 /*
  * curl/curl.h — cabeçalho mínimo do libcurl para o build Android.
  *
- * O mod store online (ui_mod_discovery_http.cpp) é o único consumidor de curl.
- * No Android v1 ele é mantido compilável mas inoperante: o stub retorna erro
- * de rede imediatamente. Mods LOCAIS (.nrm/.rtz) continuam funcionando.
+ * RecompFrontend's online mod store is the only curl consumer on Android.
+ * This compatibility header exposes the small easy-GET subset implemented by
+ * curl_stub.cpp, which delegates HTTP(S) to Android's platform networking.
  *
- * Os valores dos enums são copiados do libcurl real para futura substituição
- * por um libcurl Android completo sem mudanças no código do frontend.
+ * Enum values match libcurl so the frontend can use the normal API unchanged.
  */
 #ifndef ANDROID_STUB_CURL_CURL_H
 #define ANDROID_STUB_CURL_CURL_H
@@ -23,10 +22,13 @@ typedef enum {
     CURLE_OK = 0,
     CURLE_UNSUPPORTED_PROTOCOL = 1,
     CURLE_COULDNT_RESOLVE_HOST = 6,
-    CURLE_COULDNT_CONNECT = 7,
-    CURLE_OPERATION_TIMEDOUT = 28,
     CURLE_FAILED_INIT = 2,
-    CURLE_OUT_OF_MEMORY = 27
+    CURLE_COULDNT_RESOLVE_HOST = 6,
+    CURLE_COULDNT_CONNECT = 7,
+    CURLE_WRITE_ERROR = 23,
+    CURLE_OUT_OF_MEMORY = 27,
+    CURLE_OPERATION_TIMEDOUT = 28,
+    CURLE_PEER_FAILED_VERIFICATION = 60
 } CURLcode;
 
 typedef enum {
@@ -59,7 +61,7 @@ struct curl_slist {
     struct curl_slist* next;
 };
 
-typedef size_t (*curl_write_callback)(char* buffer, size_t size, size_t nitems, void* outstream);
+typedef size_t (*curl_write_callback)(void* buffer, size_t size, size_t nitems, void* outstream);
 
 CURLcode curl_global_init(long flags);
 void curl_global_cleanup(void);
