@@ -344,3 +344,25 @@ diff --git a/librecomp/src/mods.cpp b/librecomp/src/mods.cpp
  }
  
  void recomp::mods::unmet_dependency_handler(uint8_t* rdram, recomp_context* ctx, uintptr_t arg) {
+
+diff --git a/librecomp/src/mods.cpp b/librecomp/src/mods.cpp
+--- a/librecomp/src/mods.cpp
++++ b/librecomp/src/mods.cpp
+@@ -518,7 +518,17 @@ recomp::mods::LiveRecompilerCodeHandle::LiveRecompilerCodeHandle(
+ 
+     // Generate the code.
+     recompiler_output = std::make_unique<N64Recomp::LiveGeneratorOutput>(generator.finish());
+-    is_good = !errored && recompiler_output->good;
++    // SLJIT can report a successful generation path even when executable
++    // memory allocation returned null. On Android this happened with the
++    // default RWX allocator: mods appeared enabled in the UI but their native
++    // ARM64 code was never actually executable. Treat a null JIT buffer as a
++    // hard load failure so the runtime does not silently continue.
++    is_good = !errored && recompiler_output->good && recompiler_output->code != nullptr;
++#if defined(__ANDROID__)
++    fprintf(stderr,
++        "DK64MOD LiveRecomp: funcs=%zu code=%p bytes=%zu good=%d\n",
++        context.functions.size(), recompiler_output->code,
++        recompiler_output->code_size, is_good ? 1 : 0);
++#endif
+ }
