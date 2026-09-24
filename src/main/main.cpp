@@ -391,7 +391,7 @@ static bool init_android_audio_driver(const char* driver_name, uint32_t output_f
     if (driver_name && *driver_name) {
         SDL_setenv("SDL_AUDIODRIVER", driver_name, 1);
     } else {
-        SDL_unsetenv("SDL_AUDIODRIVER");
+        unsetenv("SDL_AUDIODRIVER");
     }
 
     if (SDL_InitSubSystem(SDL_INIT_AUDIO) != 0) {
