@@ -81,7 +81,7 @@ bool ensure_jni_cache(JNIEnv *env) {
     if (local == nullptr) {
         if (env->ExceptionCheck()) env->ExceptionClear();
         ALOGE("file bridge: FindClass(%s) falhou (thread nativa sem cache "
-              "populado? nativeBridgeInit não rodou)", kMainActivity);
+              "populated? nativeBridgeInit did not run)", kMainActivity);
         return false;
     }
 
@@ -97,7 +97,7 @@ bool ensure_jni_cache(JNIEnv *env) {
     if (mid == nullptr) {
         if (env->ExceptionCheck()) env->ExceptionClear();
         env->DeleteGlobalRef(global);
-        ALOGE("file bridge: requestFilePicker(I)Z não encontrado");
+        ALOGE("file bridge: requestFilePicker(I)Z not found");
         return false;
     }
 
@@ -124,7 +124,7 @@ bool ensure_jni_cache(JNIEnv *env) {
 bool call_java_request(Kind kind) {
     JavaVM *vm = g_vm;
     if (vm == nullptr) {
-        ALOGE("file bridge: JavaVM ausente (nativeBridgeInit não rodou?)");
+        ALOGE("file bridge: JavaVM missing (nativeBridgeInit did not run?)");
         return false;
     }
 
@@ -154,7 +154,7 @@ bool call_java_request(Kind kind) {
         return false;
     }
 
-    if (!res) ALOGE("file bridge: Java recusou o pedido (Activity indisponível?)");
+    if (!res) ALOGE("file bridge: Java rejected request (Activity unavailable?)");
     return res == JNI_TRUE;
 }
 
@@ -184,12 +184,12 @@ bool request(Kind kind, Callback callback) {
     }
 
     if (rejected) {
-        ALOGE("file bridge: pedido ignorado — outro já pendente");
+        ALOGE("file bridge: request ignored — another request is already pending");
         rejected(false, std::string{});
         return false;
     }
 
-    ALOGI("file bridge: abrindo SAF picker (kind=%d)", static_cast<int>(kind));
+    ALOGI("file bridge: opening SAF picker (kind=%d)", static_cast<int>(kind));
     if (call_java_request(kind)) {
         return true;
     }
@@ -224,7 +224,7 @@ void process_pending() {
         g_state = State::Idle;
     }
 
-    ALOGI("file bridge: despachando resultado (ok=%d, payload=%.120s)",
+    ALOGI("file bridge: dispatching result (ok=%d, payload=%.120s)",
           ok ? 1 : 0, payload.c_str());
     if (cb) cb(ok, payload);
 }
@@ -254,10 +254,10 @@ Java_com_deivid22srk_dk64recomp_MainActivity_nativeBridgeInit(JNIEnv *env, jclas
          */
         if (androidport::filedialog::ensure_jni_cache(env)) {
             __android_log_print(ANDROID_LOG_INFO, "DK64Recomp",
-                                "file bridge: JavaVM registrada + classe/método em cache");
+                                "file bridge: JavaVM registered + class/method cached");
         } else {
             __android_log_print(ANDROID_LOG_ERROR, "DK64Recomp",
-                                "file bridge: JavaVM registrada, mas o cache JNI falhou");
+                                "file bridge: JavaVM registered, but JNI cache failed");
         }
     }
 }
@@ -279,10 +279,10 @@ Java_com_deivid22srk_dk64recomp_MainActivity_nativeOnFilePicked(JNIEnv *env, jcl
             g_ok = (ok == JNI_TRUE);
             g_payload = utf ? utf : "";
             g_state = State::Result;
-            ALOGI("file bridge: resultado publicado (ok=%d, %.80s)",
+            ALOGI("file bridge: result published (ok=%d, %.80s)",
                   g_ok ? 1 : 0, g_payload.c_str());
         } else {
-            ALOGW("file bridge: resultado ignorado (slot não está Waiting)");
+            ALOGW("file bridge: result ignored (slot is not Waiting)");
         }
     }
 
