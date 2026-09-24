@@ -193,7 +193,7 @@ diff --git a/librecomp/include/librecomp/mods.hpp b/librecomp/include/librecomp/
 diff --git a/librecomp/src/mods.cpp b/librecomp/src/mods.cpp
 --- a/librecomp/src/mods.cpp
 +++ b/librecomp/src/mods.cpp
-@@ -1568,6 +1568,67 @@ void recomp::mods::ModContext::set_latest_game_mode_id(const std::string& game_m
+@@ -1568,6 +1568,74 @@ void recomp::mods::ModContext::set_latest_game_mode_id(const std::string& game_m
      mod_configuration_thread_queue.enqueue(ModConfigSetLatestGamemode());
  }
  
@@ -277,7 +277,7 @@ diff --git a/librecomp/src/mods.cpp b/librecomp/src/mods.cpp
          auto& mod = opened_mods[rom_patch_mod_index];
          
          bool patch_exists;
-@@ -1682,6 +1743,22 @@ std::vector<recomp::mods::ModLoadErrorDetails> recomp::mods::ModContext::load_mo
+@@ -1682,6 +1743,23 @@ std::vector<recomp::mods::ModLoadErrorDetails> recomp::mods::ModContext::load_mo
  
          recomp::set_rom_contents(std::move(patched_rom));
      }
@@ -313,7 +313,7 @@ diff --git a/librecomp/src/mods.cpp b/librecomp/src/mods.cpp
 diff --git a/librecomp/src/recomp.cpp b/librecomp/src/recomp.cpp
 --- a/librecomp/src/recomp.cpp
 +++ b/librecomp/src/recomp.cpp
-@@ -713,6 +713,34 @@ bool wait_for_game_started(uint8_t* rdram, recomp_context* context) {
+@@ -713,6 +713,36 @@ bool wait_for_game_started(uint8_t* rdram, recomp_context* context) {
                  auto find_it = game_roms.find(current_game.value());
                  const recomp::GameEntry& game_entry = find_it->second;
  
