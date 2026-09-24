@@ -14,7 +14,7 @@ android {
     ndkVersion = "27.2.12479018"
 
     defaultConfig {
-        applicationId = "com.8cee.dk64recomp"
+        applicationId = "com.eightcee.dk64recomp"
         minSdk = 26
         targetSdk = 34
         versionCode = 5
