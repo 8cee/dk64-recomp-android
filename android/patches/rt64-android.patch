@@ -102,7 +102,7 @@ diff --git a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
 index 0000000..0000000 100644
 --- a/src/hle/rt64_workload_queue.cpp
 +++ b/src/hle/rt64_workload_queue.cpp
-@@ -188,7 +188,15 @@
+@@ -188,7 +188,16 @@
          switch (resolutionMode) {
          case UserConfiguration::Resolution::WindowIntegerScale:
              if (ext.sharedResources->swapChainHeight > 0) {
@@ -1691,7 +1691,7 @@ index 1ceb2ce..da9bebe
      bool gpuTileUsesTMEM = canDecodeTMEM && gpuTileFlagRawTMEM(gpuTile.flags);
      if ((nativeSampler == NATIVE_SAMPLER_NONE) || gpuTileUsesTMEM) {
  #if USE_FOR_LOOPS
-@@ -263,7 +272,15 @@ float4 sampleTexture(OtherMode otherMode, RenderFlags renderFlags, float2 inputU
+@@ -263,8 +272,16 @@ float4 sampleTexture(OtherMode otherMode, RenderFlags renderFlags, float2 inputU
      const bool canDecodeTMEM = renderFlagCanDecodeTMEM(renderFlags);
      const bool usesHDR = renderFlagUsesHDR(renderFlags);
      const uint nativeSampler = rdpTile.nativeSampler;
