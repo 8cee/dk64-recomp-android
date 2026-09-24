@@ -673,7 +673,7 @@ index f1dd503..690fe12
          capabilities.maxTextureSize = physicalDeviceProperties.limits.maxImageDimension2D;
          capabilities.preferHDR = memoryHeapSize > (512 * 1024 * 1024);
          capabilities.dynamicDepthBias = true;
-@@ -4139,6 +4497,86 @@ namespace plume {
+@@ -4139,6 +4497,91 @@ namespace plume {
          capabilities.uma = (description.type == RenderDeviceType::INTEGRATED) && hasHostVisibleDeviceLocalMemory;
          capabilities.gpuUploadHeap = capabilities.uma;
  
@@ -756,6 +756,11 @@ index f1dd503..690fe12
 +        // work with dual source blending, so uberShaderReliable must never be true
 +        // while dualSourceBlendReliable is false.
 +        capabilities.dualSourceBlendReliable = capabilities.flatShadingReliable;
++
++        fprintf(stderr, "DK64DIAG plume: device='%s' vendor=0x%04X driverID=%u flat=%d uber=%d dualSource=%d override=%s.\n",
++            physicalDeviceProperties.deviceName, physicalDeviceProperties.vendorID, unsigned(driverProperties.driverID),
++            capabilities.flatShadingReliable ? 1 : 0, capabilities.uberShaderReliable ? 1 : 0,
++            capabilities.dualSourceBlendReliable ? 1 : 0, compatOverride ? compatOverride : "auto");
 +
  #   if defined(__APPLE__)
          // MoltenVK supports triangle fans but does so via compute shaders to translate to lists, since it has to

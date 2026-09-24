@@ -16,7 +16,11 @@ import android.widget.Switch;
 import android.widget.TextView;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Tela de LOGS E DIAGNÓSTICO (pedido do usuário):
@@ -43,6 +47,7 @@ public class DiagnosticsActivity extends Activity {
 
     private LinearLayout fileListContainer;
     private TextView statusText;
+    private TextView rendererModeText;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -64,8 +69,9 @@ public class DiagnosticsActivity extends Activity {
 
         // Explicação
         TextView expl = label(
-                "A captura vem DESATIVADA por padrão — ligue o interruptor "
-                        + "abaixo para começar a capturar AGORA (não precisa reabrir "
+                "Neste build de auditoria r8, a captura vem ATIVADA por padrão para "
+                        + "registrar a primeira execução automaticamente. Você pode desligá-la "
+                        + "abaixo a qualquer momento (não precisa reabrir "
                         + "o app). Com a captura ATIVADA, todo o log do jogo é registrado "
                         + "em um arquivo (áudio, renderização Vulkan/RT64, driver, ciclo "
                         + "de vida e crashes), linha a linha. Se o app fechar à força ou "
@@ -97,6 +103,41 @@ public class DiagnosticsActivity extends Activity {
         // Status da sessão
         statusText = label("", 14, Typeface.NORMAL);
         root.addView(statusText);
+
+        root.addView(spacer(12));
+
+        // Renderer A/B test controls. The native side reads renderer_compat.txt
+        // during the next process start, before plume creates the Vulkan device.
+        root.addView(label("Modo do renderer (aplica na próxima execução)", 15, Typeface.BOLD));
+        rendererModeText = label("", 14, Typeface.NORMAL);
+        root.addView(rendererModeText);
+
+        LinearLayout rendererButtons = new LinearLayout(this);
+        rendererButtons.setOrientation(LinearLayout.HORIZONTAL);
+        rendererButtons.setGravity(Gravity.START);
+
+        Button rendererAuto = new Button(this);
+        rendererAuto.setAllCaps(false);
+        rendererAuto.setText("Auto");
+        rendererAuto.setOnClickListener(v -> setRendererMode("auto"));
+        rendererButtons.addView(rendererAuto);
+
+        Button rendererFull = new Button(this);
+        rendererFull.setAllCaps(false);
+        rendererFull.setText("Full");
+        rendererFull.setOnClickListener(v -> setRendererMode("full"));
+        rendererButtons.addView(rendererFull);
+
+        Button rendererLegacy = new Button(this);
+        rendererLegacy.setAllCaps(false);
+        rendererLegacy.setText("Legacy");
+        rendererLegacy.setOnClickListener(v -> setRendererMode("legacy"));
+        rendererButtons.addView(rendererLegacy);
+
+        root.addView(rendererButtons);
+        root.addView(label("Depois de mudar o modo, feche completamente e reabra o jogo. "
+                + "Auto = detecção por GPU; Full = caminho normal; Legacy = compatibilidade Adreno 6xx.",
+                13, Typeface.NORMAL));
 
         root.addView(spacer(12));
 
@@ -138,6 +179,10 @@ public class DiagnosticsActivity extends Activity {
         if (fileListContainer == null) return;
         File current = DiagnosticsLogger.currentSessionFile();
         boolean enabled = DiagnosticsLogger.isEnabled(this);
+
+        if (rendererModeText != null) {
+            rendererModeText.setText("Próxima execução: " + readRendererMode().toUpperCase(Locale.US));
+        }
 
         if (statusText != null) {
             if (enabled && current != null) {
@@ -201,6 +246,65 @@ public class DiagnosticsActivity extends Activity {
     }
 
     // ------------------------------------------------------------------
+
+    private File rendererCompatExternal() {
+        File base = getExternalFilesDir(null);
+        return (base != null) ? new File(base, "renderer_compat.txt") : null;
+    }
+
+    private File rendererCompatInternal() {
+        return new File(getFilesDir(), "renderer_compat.txt");
+    }
+
+    private String readRendererMode() {
+        File[] candidates = new File[]{rendererCompatExternal(), rendererCompatInternal()};
+        for (File f : candidates) {
+            if (f == null || !f.isFile()) continue;
+            try (FileInputStream in = new FileInputStream(f)) {
+                byte[] buf = new byte[32];
+                int n = in.read(buf);
+                if (n <= 0) continue;
+                String mode = new String(buf, 0, n, StandardCharsets.UTF_8)
+                        .trim().toLowerCase(Locale.US);
+                if (mode.equals("full") || mode.equals("legacy")) return mode;
+            } catch (Throwable ignored) { }
+        }
+        return "auto";
+    }
+
+    private void setRendererMode(String mode) {
+        String normalized = (mode == null) ? "auto" : mode.trim().toLowerCase(Locale.US);
+        if (!normalized.equals("auto") && !normalized.equals("full") && !normalized.equals("legacy")) {
+            normalized = "auto";
+        }
+
+        File[] targets = new File[]{rendererCompatExternal(), rendererCompatInternal()};
+        boolean ok = true;
+        for (File f : targets) {
+            if (f == null) continue;
+            try {
+                if (normalized.equals("auto")) {
+                    if (f.exists() && !f.delete()) ok = false;
+                } else {
+                    File parent = f.getParentFile();
+                    if (parent != null && !parent.isDirectory()) parent.mkdirs();
+                    try (FileOutputStream out = new FileOutputStream(f, false)) {
+                        out.write((normalized + "\n").getBytes(StandardCharsets.UTF_8));
+                        out.flush();
+                        try { out.getFD().sync(); } catch (Throwable ignored) { }
+                    }
+                }
+            } catch (Throwable t) {
+                ok = false;
+            }
+        }
+
+        String selected = readRendererMode();
+        if (rendererModeText != null) {
+            rendererModeText.setText("Próxima execução: " + selected.toUpperCase(Locale.US)
+                    + (ok ? " — feche e reabra o jogo" : " — houve erro ao gravar a configuração"));
+        }
+    }
 
     private TextView label(String text, float sizeSp, int style) {
         TextView tv = new TextView(this);

@@ -58,12 +58,11 @@ public final class DiagnosticsLogger {
     private static final String PREFS = "dk64_diagnostics";
     private static final String PREF_ENABLED = "enabled";
 
-    /** Captura DESATIVADA por padrão (pedido do usuário): nada é registrado
-     *  até que o usuário ligue a captura nas Configurações do app — menu do
-     *  jogo -> "Logs de diagnóstico" (ou long-press no ícone -> shortcut).
-     *  Ao ligar, a sessão começa NA HORA (setEnabled inicia a sessão); não
-     *  é preciso reabrir o app. */
-    private static final boolean DEFAULT_ENABLED = false;
+    /** Audit r8: capture enabled by default so the first graphics test is useful
+     *  even if the user never opens the diagnostics screen. It can still be
+     *  disabled live from "Logs de diagnóstico". The logger is capped at 8 MB
+     *  per session and keeps only the five newest sessions. */
+    private static final boolean DEFAULT_ENABLED = true;
 
     private static final int KEEP_FILES = 5;
     private static final long MAX_FILE_BYTES = 8L * 1024 * 1024;

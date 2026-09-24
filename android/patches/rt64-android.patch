@@ -540,7 +540,7 @@ index 721a01e..6ab7443
      // OptimizerCacheSPIRV
  
      void OptimizerCacheSPIRV::initialize() {
-@@ -74,16 +240,116 @@ namespace RT64 {
+@@ -74,16 +240,120 @@ namespace RT64 {
          rasterPSMS.parse(RasterPSSpecConstantMSBlobSPIRV, std::size(RasterPSSpecConstantMSBlobSPIRV));
          rasterPSFlat.parse(RasterPSSpecConstantFlatBlobSPIRV, std::size(RasterPSSpecConstantFlatBlobSPIRV));
          rasterPSFlatMS.parse(RasterPSSpecConstantFlatMSBlobSPIRV, std::size(RasterPSSpecConstantFlatMSBlobSPIRV));
@@ -593,6 +593,10 @@ index 721a01e..6ab7443
 +        // before the flat shading early return below: drivers that fail the flat
 +        // probe are exactly the ones that need the dual source gate the most.
 +        g_DualSourceBlendSupported = device->getCapabilities().dualSourceBlendReliable;
++        fprintf(stderr, "DK64DIAG RT64: flat=%d uber=%d dualSource=%d.\n",
++            device->getCapabilities().flatShadingReliable ? 1 : 0,
++            device->getCapabilities().uberShaderReliable ? 1 : 0,
++            device->getCapabilities().dualSourceBlendReliable ? 1 : 0);
 +        if (!g_DualSourceBlendSupported) {
 +            fprintf(stderr, "RT64: driver reported as unreliable for dual source blending. Raster shaders will fold the blend factor into output 0.\n");
 +        }
