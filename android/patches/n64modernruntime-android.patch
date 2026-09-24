@@ -348,7 +348,7 @@ diff --git a/librecomp/src/mods.cpp b/librecomp/src/mods.cpp
 diff --git a/librecomp/src/mods.cpp b/librecomp/src/mods.cpp
 --- a/librecomp/src/mods.cpp
 +++ b/librecomp/src/mods.cpp
-@@ -518,7 +518,17 @@ recomp::mods::LiveRecompilerCodeHandle::LiveRecompilerCodeHandle(
+@@ -518,5 +518,16 @@ recomp::mods::LiveRecompilerCodeHandle::LiveRecompilerCodeHandle(
  
      // Generate the code.
      recompiler_output = std::make_unique<N64Recomp::LiveGeneratorOutput>(generator.finish());
