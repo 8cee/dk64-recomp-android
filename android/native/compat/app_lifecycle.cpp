@@ -36,20 +36,28 @@ bool g_active = true; // padrão: em primeiro plano (o Java só restringe)
 // DocumentsUI: onPause + onWindowFocusChanged(true) prematuro libera a
 // thread, e só então a surface morre de fato 700 ms depois.
 std::atomic<bool> g_surface_dirty{false};
+std::atomic<bool> g_audio_resume_requested{false};
 
 } // namespace
 
 void set_active(bool active) {
+    bool changed = false;
     {
         std::lock_guard<std::mutex> lock(g_mutex);
-        if (g_active == active) return;
+        changed = (g_active != active);
         g_active = active;
     }
 
     if (active) {
-        ALOGI("lifecycle: app ativo — liberando present queue");
+        if (changed) {
+            // SDL's Android backend may come back from nativeResume() with a
+            // logically-open SDL device whose AAudio/OpenSL stream is dead.
+            // Let the game audio callback reopen it on its own thread.
+            g_audio_resume_requested.store(true, std::memory_order_release);
+            ALOGI("lifecycle: app ativo — áudio marcado para recuperação");
+        }
         g_cv.notify_all();
-    } else {
+    } else if (changed) {
         ALOGI("lifecycle: app em segundo plano — congelando present queue");
     }
 }
@@ -68,6 +76,14 @@ void mark_surface_dirty() {
 
 bool consume_surface_dirty() {
     return g_surface_dirty.exchange(false, std::memory_order_acq_rel);
+}
+
+void request_audio_resume() {
+    g_audio_resume_requested.store(true, std::memory_order_release);
+}
+
+bool consume_audio_resume() {
+    return g_audio_resume_requested.exchange(false, std::memory_order_acq_rel);
 }
 
 bool wait_while_backgrounded(const std::atomic<bool> &running) {
@@ -135,6 +151,11 @@ Java_com_deivid22srk_dk64recomp_MainActivity_nativeSurfaceState(JNIEnv * /*env*/
         // consume_surface_dirty() no início do threadLoop.
         break;
     }
+}
+
+JNIEXPORT void JNICALL
+Java_com_deivid22srk_dk64recomp_MainActivity_nativeRequestAudioResume(JNIEnv * /*env*/, jclass /*clazz*/) {
+    androidport::lifecycle::request_audio_resume();
 }
 
 } // extern "C"

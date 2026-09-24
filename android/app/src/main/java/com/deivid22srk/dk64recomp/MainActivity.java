@@ -439,6 +439,9 @@ public class MainActivity extends SDLActivity {
      */
     private static native void nativeSurfaceState(int state);
 
+    /** Pede ao nativo para validar/reabrir o backend SDL de áudio após resume. */
+    private static native void nativeRequestAudioResume();
+
     /** Callback anexado ao SurfaceHolder da SDLSurface para observar surfaceCreated/Destroyed/Changed. */
     private SurfaceHolder.Callback dk64SurfaceCallback;
 
@@ -459,6 +462,14 @@ public class MainActivity extends SDLActivity {
     public void onResume() {
         super.onResume();
         DiagnosticsLogger.mark("onResume — app de volta ao primeiro plano");
+        // O SDL pode retomar com um SDL_AudioDeviceID ainda válido, mas com a
+        // stream AAudio/OpenSL subjacente morta. Não tocamos no device na UI
+        // thread: apenas marcamos; o callback de áudio reabre com mutex.
+        try {
+            nativeRequestAudioResume();
+        } catch (UnsatisfiedLinkError e) {
+            Log.e(TAG, "nativeRequestAudioResume indisponível: " + e.getMessage());
+        }
     }
 
     @Override

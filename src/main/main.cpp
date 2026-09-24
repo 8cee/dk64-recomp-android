@@ -9,6 +9,9 @@
 #include <cinttypes>
 #include <chrono>
 #include <thread>
+#include <algorithm>
+#include <mutex>
+#include <atomic>
 
 #include "nfd.h"
 
@@ -23,6 +26,7 @@
 #include "virtual_pad.h"
 #include "app_restart.h"
 #include "crash_handler.h"
+#include "app_lifecycle.h"
 #else
 #define SDL_MAIN_HANDLED
 #endif
@@ -290,6 +294,8 @@ void update_gfx(void*) {
 
 static SDL_AudioCVT audio_convert;
 static SDL_AudioDeviceID audio_device = 0;
+static std::mutex audio_mutex;
+static uint32_t audio_output_freq = 48000;
 
 // Samples per channel per second.
 static uint32_t sample_rate = 48000;
@@ -307,11 +313,205 @@ static uint32_t discarded_output_frames;
 
 constexpr uint32_t bytes_per_frame = input_channels * sizeof(float);
 
+void update_audio_converter_unlocked() {
+    int ret = SDL_BuildAudioCVT(&audio_convert, AUDIO_F32, input_channels, sample_rate,
+                                AUDIO_F32, output_channels, output_sample_rate);
+
+    if (ret < 0) {
+        printf("Error creating SDL audio converter: %s\n", SDL_GetError());
+        throw std::runtime_error("Error creating SDL audio converter");
+    }
+
+    // Calculate the number of samples to discard based on the sample rate ratio and the duplicate frame count.
+    discarded_output_frames = duplicated_input_frames * output_sample_rate / sample_rate;
+}
+
+static void close_audio_device_unlocked() {
+    if (audio_device != 0) {
+        SDL_ClearQueuedAudio(audio_device);
+        SDL_CloseAudioDevice(audio_device);
+        audio_device = 0;
+    }
+}
+
+static bool open_audio_device_unlocked(uint32_t output_freq, bool show_error) {
+    SDL_AudioSpec spec_desired{
+        .freq = (int)output_freq,
+        .format = AUDIO_F32,
+        .channels = (Uint8)output_channels,
+        .silence = 0,
+        .samples = 0x100, // keep the original low-latency queue size
+        .padding = 0,
+        .size = 0,
+        .callback = nullptr,
+        .userdata = nullptr
+    };
+    SDL_AudioSpec spec_obtained{};
+
+    close_audio_device_unlocked();
+
+    // Let SDL choose a hardware-friendly sample rate. Format/channels remain F32 stereo,
+    // and SDL performs any hardware conversion internally when needed.
+    audio_device = SDL_OpenAudioDevice(nullptr, false, &spec_desired, &spec_obtained,
+                                       SDL_AUDIO_ALLOW_FREQUENCY_CHANGE);
+    if (audio_device == 0) {
+        const char* driver = SDL_GetCurrentAudioDriver();
+        fprintf(stderr, "Audio: SDL_OpenAudioDevice failed (driver=%s): %s\n",
+                driver ? driver : "<none>", SDL_GetError());
+        if (show_error) {
+            std::string audio_error = std::string("No audio device could be found. Please make sure an audio device is available.\nError opening audio device: ") + std::string(SDL_GetError());
+            recompui::message_box(audio_error.c_str());
+        }
+        return false;
+    }
+
+    output_sample_rate = spec_obtained.freq > 0 ? static_cast<uint32_t>(spec_obtained.freq) : output_freq;
+    audio_output_freq = output_freq;
+    update_audio_converter_unlocked();
+
+    SDL_ClearQueuedAudio(audio_device);
+    SDL_PauseAudioDevice(audio_device, 0);
+
+    const char* driver = SDL_GetCurrentAudioDriver();
+    fprintf(stderr,
+            "Audio: opened device id=%u driver=%s desired=%uHz/F32/stereo obtained=%dHz fmt=0x%04x ch=%u samples=%u\n",
+            static_cast<unsigned>(audio_device), driver ? driver : "<none>", output_freq,
+            spec_obtained.freq, static_cast<unsigned>(spec_obtained.format),
+            static_cast<unsigned>(spec_obtained.channels), static_cast<unsigned>(spec_obtained.samples));
+    return true;
+}
+
+#ifdef __ANDROID__
+static bool init_android_audio_driver(const char* driver_name, uint32_t output_freq) {
+    if (SDL_WasInit(SDL_INIT_AUDIO)) {
+        close_audio_device_unlocked();
+        SDL_QuitSubSystem(SDL_INIT_AUDIO);
+    }
+
+    if (driver_name && *driver_name) {
+        SDL_setenv("SDL_AUDIODRIVER", driver_name, 1);
+    } else {
+        SDL_unsetenv("SDL_AUDIODRIVER");
+    }
+
+    if (SDL_InitSubSystem(SDL_INIT_AUDIO) != 0) {
+        fprintf(stderr, "Audio: SDL_InitSubSystem failed for driver %s: %s\n",
+                driver_name ? driver_name : "<default>", SDL_GetError());
+        return false;
+    }
+
+    return open_audio_device_unlocked(output_freq, false);
+}
+#endif
+
+bool reset_audio(uint32_t output_freq) {
+    std::lock_guard<std::mutex> lock(audio_mutex);
+
+#ifdef __ANDROID__
+    // SDL 2.30.x prefers AAudio first on modern Android. AAudio has had several
+    // device/Android-version regressions (including silent/broken output after
+    // lifecycle/device changes). OpenSL ES is less glamorous but is much more
+    // predictable for this queue-based N64 audio path, so try it first and keep
+    // AAudio/default as fallbacks.
+    const char* current = SDL_GetCurrentAudioDriver();
+    if (current != nullptr && audio_device != 0) {
+        return open_audio_device_unlocked(output_freq, true);
+    }
+
+    if (init_android_audio_driver("openslES", output_freq)) {
+        // onResume() can run before SDL_main on the initial launch. The device
+        // was just freshly opened here, so discard that stale recovery request.
+        androidport::lifecycle::consume_audio_resume();
+        return true;
+    }
+    if (init_android_audio_driver("AAudio", output_freq)) {
+        androidport::lifecycle::consume_audio_resume();
+        return true;
+    }
+    if (init_android_audio_driver(nullptr, output_freq)) {
+        androidport::lifecycle::consume_audio_resume();
+        return true;
+    }
+
+    std::string audio_error = std::string("No Android audio backend could be opened.\nLast SDL error: ") + std::string(SDL_GetError());
+    recompui::message_box(audio_error.c_str());
+    return false;
+#else
+    return open_audio_device_unlocked(output_freq, true);
+#endif
+}
+
+static bool recover_audio_unlocked(const char* reason) {
+    fprintf(stderr, "Audio: recovering output device (%s)\n", reason ? reason : "unknown");
+
+#ifdef __ANDROID__
+    // Keep the already-selected backend when possible. If it can no longer be
+    // reopened, fall back through the same Android backend chain.
+    if (audio_device != 0 || SDL_GetCurrentAudioDriver() != nullptr) {
+        if (open_audio_device_unlocked(audio_output_freq, false)) {
+            return true;
+        }
+    }
+
+    const char* current = SDL_GetCurrentAudioDriver();
+    if (!current || SDL_strcasecmp(current, "openslES") != 0) {
+        if (init_android_audio_driver("openslES", audio_output_freq)) return true;
+    }
+    current = SDL_GetCurrentAudioDriver();
+    if (!current || SDL_strcasecmp(current, "AAudio") != 0) {
+        if (init_android_audio_driver("AAudio", audio_output_freq)) return true;
+    }
+    return init_android_audio_driver(nullptr, audio_output_freq);
+#else
+    return open_audio_device_unlocked(audio_output_freq, false);
+#endif
+}
+
+static bool ensure_audio_ready_unlocked(const char* caller) {
+#ifdef __ANDROID__
+    // Consume this in BOTH queue_samples() and get_frames_remaining(). If the
+    // underlying Android stream dies with bytes still queued, the game can stop
+    // producing new chunks; get_frames_remaining() may then be the only audio
+    // callback that continues to run.
+    if (androidport::lifecycle::consume_audio_resume()) {
+        if (!recover_audio_unlocked("Android Activity resumed")) {
+            return false;
+        }
+    }
+#endif
+
+    if (audio_device == 0) {
+        return recover_audio_unlocked(caller ? caller : "audio device missing");
+    }
+
+    SDL_AudioStatus status = SDL_GetAudioDeviceStatus(audio_device);
+    if (status == SDL_AUDIO_PAUSED) {
+        SDL_PauseAudioDevice(audio_device, 0);
+        status = SDL_GetAudioDeviceStatus(audio_device);
+    }
+    if (status == SDL_AUDIO_STOPPED) {
+        return recover_audio_unlocked(caller ? caller : "device stopped");
+    }
+    return true;
+}
+
 void queue_samples(int16_t* audio_data, size_t sample_count) {
+    std::lock_guard<std::mutex> lock(audio_mutex);
+
+    if (!ensure_audio_ready_unlocked("queue_samples")) {
+        return;
+    }
+
     // Buffer for holding the output of swapping the audio channels. This is reused across
     // calls to reduce runtime allocations.
     static std::vector<float> swap_buffer;
     static std::array<float, duplicated_input_frames * input_channels> duplicated_sample_buffer;
+
+    if (sample_count <= duplicated_input_frames * input_channels) {
+        // Tiny chunks used to trip the assertion below. They carry too little
+        // data for the interpolation padding and can safely be skipped.
+        return;
+    }
 
     // Make sure the swap buffer is large enough to hold the audio data, including any extra space needed for resampling.
     size_t resampled_sample_count = sample_count + duplicated_input_frames * input_channels;
@@ -333,9 +533,6 @@ void queue_samples(int16_t* audio_data, size_t sample_count) {
         swap_buffer[i + 1 + duplicated_input_frames * input_channels] = audio_data[i + 0] * (0.5f / 32768.0f) * cur_main_volume;
     }
     
-    // TODO handle cases where a chunk is smaller than the duplicated frame count.
-    assert(sample_count > duplicated_input_frames * input_channels);
-
     // Copy the last converted samples into the duplicated sample buffer to reuse in resampling the next queued chunk.
     for (size_t i = 0; i < duplicated_input_frames * input_channels; i++) {
         duplicated_sample_buffer[i] = swap_buffer[i + sample_count];
@@ -347,8 +544,8 @@ void queue_samples(int16_t* audio_data, size_t sample_count) {
     int ret = SDL_ConvertAudio(&audio_convert);
 
     if (ret < 0) {
-        printf("Error using SDL audio converter: %s\n", SDL_GetError());
-        throw std::runtime_error("Error using SDL audio converter");
+        fprintf(stderr, "Error using SDL audio converter: %s\n", SDL_GetError());
+        return;
     }
 
     uint64_t cur_queued_microseconds = uint64_t(SDL_GetQueuedAudioSize(audio_device)) / bytes_per_frame * 1000000 / sample_rate;
@@ -358,8 +555,11 @@ void queue_samples(int16_t* audio_data, size_t sample_count) {
     // Prevent audio latency from building up by skipping samples in incoming audio when too many samples are already queued.
     // Skip samples based on how many microseconds of samples are queued already.
     uint32_t skip_factor = cur_queued_microseconds / 100000;
+    // Avoid undefined shifts after an extreme stall. More than 8x skipping is
+    // already enough to drain the queue quickly.
+    skip_factor = std::min<uint32_t>(skip_factor, 3);
     if (skip_factor != 0) {
-        uint32_t skip_ratio = 1 << skip_factor;
+        uint32_t skip_ratio = 1u << skip_factor;
         num_bytes_to_queue /= skip_ratio;
         for (size_t i = 0; i < num_bytes_to_queue / (output_channels * sizeof(swap_buffer[0])); i++) {
             samples_to_queue[2 * i + 0] = samples_to_queue[2 * skip_ratio * i + 0];
@@ -367,12 +567,21 @@ void queue_samples(int16_t* audio_data, size_t sample_count) {
         }
     }
 
-    // Queue the swapped audio data.
-    // Offset the data start by only half the discarded frame count as the other half of the discarded frames are at the end of the buffer.
-    SDL_QueueAudio(audio_device, samples_to_queue, num_bytes_to_queue);
+    if (SDL_QueueAudio(audio_device, samples_to_queue, num_bytes_to_queue) != 0) {
+        fprintf(stderr, "Audio: SDL_QueueAudio failed: %s\n", SDL_GetError());
+        if (recover_audio_unlocked("queue failure")) {
+            // Retry this chunk once on the fresh device.
+            if (SDL_QueueAudio(audio_device, samples_to_queue, num_bytes_to_queue) != 0) {
+                fprintf(stderr, "Audio: SDL_QueueAudio retry failed: %s\n", SDL_GetError());
+            }
+        }
+    }
 }
 
 size_t get_frames_remaining() {
+    std::lock_guard<std::mutex> lock(audio_mutex);
+    if (!ensure_audio_ready_unlocked("get_frames_remaining")) return 0;
+
     constexpr float buffer_offset_frames = 1.0f;
     // Get the number of remaining buffered audio bytes.
     uint64_t buffered_byte_count = SDL_GetQueuedAudioSize(audio_device);
@@ -396,49 +605,14 @@ size_t get_frames_remaining() {
 }
 
 void update_audio_converter() {
-    int ret = SDL_BuildAudioCVT(&audio_convert, AUDIO_F32, input_channels, sample_rate, AUDIO_F32, output_channels, output_sample_rate);
-
-    if (ret < 0) {
-        printf("Error creating SDL audio converter: %s\n", SDL_GetError());
-        throw std::runtime_error("Error creating SDL audio converter");
-    }
-
-    // Calculate the number of samples to discard based on the sample rate ratio and the duplicate frame count.
-    discarded_output_frames = duplicated_input_frames * output_sample_rate / sample_rate;
+    std::lock_guard<std::mutex> lock(audio_mutex);
+    update_audio_converter_unlocked();
 }
 
 void set_frequency(uint32_t freq) {
+    std::lock_guard<std::mutex> lock(audio_mutex);
     sample_rate = freq;
-    
-    update_audio_converter();
-}
-
-bool reset_audio(uint32_t output_freq) {
-    SDL_AudioSpec spec_desired{
-        .freq = (int)output_freq,
-        .format = AUDIO_F32,
-        .channels = (Uint8)output_channels,
-        .silence = 0, // calculated
-        .samples = 0x100, // Fairly small sample count to reduce the latency of internal buffering
-        .padding = 0, // unused
-        .size = 0, // calculated
-        .callback = nullptr,
-        .userdata = nullptr
-    };
-
-    audio_device = SDL_OpenAudioDevice(nullptr, false, &spec_desired, nullptr, 0);
-    if (audio_device == 0) {
-        std::string audio_error = std::string("No audio device could be found. Please make sure an audio device is available.\nError opening audio device: ") + std::string(SDL_GetError());
-        recompui::message_box(audio_error.c_str());
-        return false;
-    }
-
-    SDL_PauseAudioDevice(audio_device, 0);
-
-    output_sample_rate = output_freq;
-    update_audio_converter();
-
-    return true;
+    update_audio_converter_unlocked();
 }
 
 extern RspUcodeFunc n_aspMain;
@@ -920,8 +1094,14 @@ int main(int argc, char** argv) {
     recompui::programconfig::set_program_name(dk64::program_name);
     recompui::programconfig::set_program_id(dk64::program_id);
     
-    // Initialize SDL audio and set the output frequency.
-    SDL_InitSubSystem(SDL_INIT_AUDIO);
+    // Initialize SDL audio and set the output frequency. On Android, reset_audio()
+    // owns backend selection so it can prefer OpenSL ES and fall back to AAudio.
+#ifndef __ANDROID__
+    if (SDL_InitSubSystem(SDL_INIT_AUDIO) != 0) {
+        fprintf(stderr, "Failed to initialize SDL audio: %s\n", SDL_GetError());
+        return EXIT_FAILURE;
+    }
+#endif
     if (!reset_audio(48000)) {
         // It is not possible to initialize without an audio device.
         return EXIT_FAILURE;

@@ -73,6 +73,16 @@ void mark_surface_dirty();
  */
 bool consume_surface_dirty();
 
+/*
+ * Sinaliza que o backend de áudio deve ser reaberto no próximo bloco de áudio.
+ * Android/SDL pode manter o SDL_AudioDeviceID vivo enquanto AAudio/OpenSL ES
+ * perdeu a stream real durante pause/resume ou troca de Surface/Activity.
+ */
+void request_audio_resume();
+
+/* Retorna true UMA vez por pedido de recuperação de áudio. */
+bool consume_audio_resume();
+
 } // namespace androidport::lifecycle
 
 #endif // ANDROID_APP_LIFECYCLE_H
