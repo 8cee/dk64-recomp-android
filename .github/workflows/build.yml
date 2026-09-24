@@ -3,7 +3,7 @@ name: build
 # Build do APK Android a cada push (e manualmente via workflow_dispatch).
 # Fluxo: codegen no host (N64Recomp/RSPRecomp/patches com a ROM do release
 # `build-inputs` do repo PRIVADO `dk64-recomp-build-inputs`, baixado via
-# secret PRIVATE_REPO_TOKEN) -> Gradle + NDK -> APK debug assinado.
+# secret PRIVATE_REPO_TOKEN) -> Gradle + NDK -> APK release com assinatura persistente.
 
 on:
   push:
@@ -78,18 +78,13 @@ jobs:
             --pattern 'Donkey.Kong.64.zip' --output rom-input/Donkey.Kong.64.zip --clobber
           cd rom-input
           unzip -o Donkey.Kong.64.zip
-          ROMS=$(find . -maxdepth 2 -iname '*.z64' -o -iname '*.n64' -o -iname '*.v64' | wc -l)
+          ROMS=$(find . -maxdepth 2 -type f \( -iname '*.z64' -o -iname '*.n64' -o -iname '*.v64' \) | wc -l)
           if [ "$ROMS" -ne 1 ]; then
             echo "::error::Esperava exatamente 1 ROM no zip, achei $ROMS"
             exit 1
           fi
-          ROM_FILE=$(find . -maxdepth 2 -iname '*.z64' -o -iname '*.n64' -o -iname '*.v64' | head -1)
-          SHA1=$(sha1sum "$ROM_FILE" | cut -d' ' -f1)
-          echo "ROM sha1: $SHA1"
-          if [ "$SHA1" != "cf806ff2603640a748fca5026ded28802f1f4a50" ]; then
-            echo "::error::ROM incorreta (esperado NTSC-U 1.0, sha1 cf806ff2...)"
-            exit 1
-          fi
+          ROM_FILE=$(find . -maxdepth 2 -type f \( -iname '*.z64' -o -iname '*.n64' -o -iname '*.v64' \) | head -1)
+          python3 ../scripts/normalize-dk64-rom.py "$ROM_FILE" dk64.us.z64
 
       - name: Build N64Recomp & RSPRecomp (host)
         run: |
@@ -106,7 +101,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p rom-work
-          cp rom-input/*.z64 rom-work/baserom.us.z64
+          cp rom-input/dk64.us.z64 rom-work/baserom.us.z64
           ( cd rom-work && python3 ../lib/dk64_decomp/tools/generate_decompressed_rom.py )
           cp rom-work/baserom.us.decompressed.z64 donkeykong64.decompressed.us.z64
           ls -la donkeykong64.decompressed.us.z64

@@ -12,14 +12,14 @@
 #     - ou diretamente o .z64/.n64/.v64 (o script empacota com o nome correto)
 #
 # O que o script faz:
-#   1) Valida o sha1 da ROM contida no zip (deve ser a NTSC-U 1.0)
+#   1) Normaliza .z64/.n64/.v64 para z64 e valida DK64 NTSC-U 1.0
 #   2) Cria (se não existir) o repo PRIVADO $PRIVATE_REPO
 #   3) Publica/atualiza o release `build-inputs` com o asset `Donkey.Kong.64.zip`
 #   4) Define o secret PRIVATE_REPO_TOKEN no repo público do port
 #   5) Com --purge-public: apaga release/tag `build-inputs` antigos do repo
 #      PÚBLICO (a ROM não deve ficar acessível no repo público)
 #
-# Requisitos: gh CLI (https://cli.github.com), zip e unzip no PATH.
+# Requisitos: gh CLI (https://cli.github.com), python3, zip e unzip no PATH.
 # Segurança: o token é usado apenas localmente pelo gh e gravado como secret
 # no GitHub; o script nunca o imprime.
 # ============================================================================
@@ -34,14 +34,13 @@ fi
 PUBLIC_REPO="${PUBLIC_REPO:-deivid22srk/dk64-recomp-android}"
 REPO_OWNER="${PUBLIC_REPO%%/*}"
 PRIVATE_REPO="${PRIVATE_REPO:-${REPO_OWNER}/dk64-recomp-build-inputs}"
-EXPECTED_SHA1="cf806ff2603640a748fca5026ded28802f1f4a50"   # DK64 NTSC-U 1.0 (comprimido)
 TAG="build-inputs"
 ASSET="Donkey.Kong.64.zip"
 
 command -v gh    >/dev/null 2>&1 || { echo "erro: gh CLI não encontrado (https://cli.github.com)"; exit 1; }
 command -v zip   >/dev/null 2>&1 || { echo "erro: zip não encontrado"; exit 1; }
 command -v unzip >/dev/null 2>&1 || { echo "erro: unzip não encontrado"; exit 1; }
-command -v sha1sum >/dev/null 2>&1 || { echo "erro: sha1sum não encontrado"; exit 1; }
+command -v python3 >/dev/null 2>&1 || { echo "erro: python3 não encontrado"; exit 1; }
 export GH_TOKEN
 
 if [ ! -f "$ROM_ZIP" ]; then
@@ -52,38 +51,37 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 # ----------------------------------------------------------------------------
-# 1) Normaliza o input para o asset $ASSET e valida o sha1 da ROM
+# 1) Extrai, normaliza byte order -> z64 e recria o asset canônico
 # ----------------------------------------------------------------------------
+mkdir -p "$WORK/check"
 case "$ROM_ZIP" in
     *.zip)
-        cp "$ROM_ZIP" "$WORK/$ASSET"
+        unzip -q -o "$ROM_ZIP" -d "$WORK/check"
         ;;
     *.z64|*.n64|*.v64)
-        echo "==> Empacotando $ROM_ZIP como $ASSET"
-        zip -q -j "$WORK/$ASSET" "$ROM_ZIP"
+        cp "$ROM_ZIP" "$WORK/check/$(basename "$ROM_ZIP")"
         ;;
     *)
         echo "erro: ROM_ZIP deve ser .zip, .z64, .n64 ou .v64"; exit 1
         ;;
 esac
 
-echo "==> Validando sha1 da ROM dentro do zip"
-mkdir -p "$WORK/check"
-unzip -q -o "$WORK/$ASSET" -d "$WORK/check"
 ROM_FILE="$(find "$WORK/check" -type f \( -iname '*.z64' -o -iname '*.n64' -o -iname '*.v64' \) | head -1)"
 if [ -z "$ROM_FILE" ]; then
-    echo "erro: nenhum .z64/.n64/.v64 dentro do zip"; exit 1
+    echo "erro: nenhum .z64/.n64/.v64 encontrado"; exit 1
 fi
 N_ROMS="$(find "$WORK/check" -type f \( -iname '*.z64' -o -iname '*.n64' -o -iname '*.v64' \) | wc -l)"
 if [ "$N_ROMS" -ne 1 ]; then
-    echo "erro: esperava exatamente 1 ROM no zip, achei $N_ROMS"; exit 1
+    echo "erro: esperava exatamente 1 ROM, achei $N_ROMS"; exit 1
 fi
-GOT_SHA1="$(sha1sum "$ROM_FILE" | cut -d' ' -f1)"
-if [ "$GOT_SHA1" != "$EXPECTED_SHA1" ]; then
-    echo "erro: ROM incorreta (sha1 $GOT_SHA1, esperado $EXPECTED_SHA1 = NTSC-U 1.0)"
-    exit 1
-fi
-echo "    sha1 OK: $GOT_SHA1"
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+CANONICAL="$WORK/Donkey Kong 64 (USA).z64"
+python3 "$SCRIPT_DIR/normalize-dk64-rom.py" "$ROM_FILE" "$CANONICAL"
+
+rm -f "$WORK/$ASSET"
+zip -q -j "$WORK/$ASSET" "$CANONICAL"
+echo "==> Asset canônico preparado: $ASSET"
 
 # ----------------------------------------------------------------------------
 # 2) Cria o repo privado (se não existir)
