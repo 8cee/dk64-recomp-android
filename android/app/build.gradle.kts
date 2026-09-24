@@ -9,12 +9,12 @@ plugins {
 val hostFileToC: String? = (project.findProperty("HOST_FILE_TO_C") as String?)?.takeIf { it.isNotBlank() }
 
 android {
-    namespace = "com.deivid22srk.dk64recomp"
+    namespace = "com.8cee.dk64recomp"
     compileSdk = 34
     ndkVersion = "27.2.12479018"
 
     defaultConfig {
-        applicationId = "com.deivid22srk.dk64recomp"
+        applicationId = "com.8cee.dk64recomp"
         minSdk = 26
         targetSdk = 34
         versionCode = 5
