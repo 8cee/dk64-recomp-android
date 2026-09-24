@@ -68,6 +68,15 @@ jobs:
           echo "Audited r8 source verified."
           git --no-pager log --oneline -8
 
+      - name: Preserve final workflow text outside .github
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci/r8-generated
+          cp .github/workflows/build.yml ci/r8-generated/build.yml
+          cp .github/workflows/release.yml ci/r8-generated/release.yml
+          git add ci/r8-generated
+
       - name: Restore workflow files for token-safe publish
         shell: bash
         run: |
