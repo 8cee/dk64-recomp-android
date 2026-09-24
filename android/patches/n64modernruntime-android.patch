@@ -75,20 +75,14 @@ index 850689d..d30ada2 100644
      
      return recomp::RomValidationError::Good;
  }
-@@ -705,8 +744,22 @@ bool wait_for_game_started(uint8_t* rdram, recomp_context* context) {
+@@ -705,14 +744,58 @@ bool wait_for_game_started(uint8_t* rdram, recomp_context* context) {
          // TODO refactor this to allow a project to specify what entrypoint function to run for a give game.
          case GameStatus::Running:
              {
 +                /*
-+                 * Port fix (crash na 1ª inicialização): em caso de falha aqui
-+                 * o fluxo anterior apenas mostrava a message box e CONTINUAVA
-+                 * — init() rodava com o rom global VAZIO (set_rom_contents
-+                 * nunca foi chamado) e o primeiro do_rom_read desreferenciava
-+                 * rom.data() == nullptr => SIGSEGV imediato e silencioso do
-+                 * processo ("o app fecha"). Espelha o caminho de recuperação
-+                 * dos erros de mods: volta o status para None (a launcher
-+                 * reaparece) e retorna false para a thread de jogo aguardar
-+                 * uma nova tentativa.
++                 * Port fix (crash on first initialization): if loading the
++                 * stored ROM fails, return to the launcher instead of running
++                 * init() with an empty ROM buffer.
 +                 */
                  if (!recomp::load_stored_rom(current_game.value())) {
 -                    ultramodern::error_handling::message_box("Error opening stored ROM! Please restart this program.");
@@ -99,7 +93,48 @@ index 850689d..d30ada2 100644
                  }
  
                  auto find_it = game_roms.find(current_game.value());
-@@ -972,12 +1025,31 @@ void recomp::start(const recomp::Configuration& cfg) {
+                 const recomp::GameEntry& game_entry = find_it->second;
+ 
++                // ROM-patch mods (translations are a common example) must be
++                // applied before init(): init performs the initial ROM DMA and
++                // the game can cache pointer-table data during startup. Applying
++                // patch.bps afterwards leaves those cached offsets pointing at
++                // the unpatched ROM, so translated assets may never appear.
++                if (!game_entry.mod_game_id.empty()) {
++                    std::vector<recomp::mods::ModLoadErrorDetails> patch_errors;
++                    {
++                        std::lock_guard lock { mod_context_mutex };
++                        patch_errors = mod_context->prepare_rom_patch(game_entry, current_game_mode_id);
++                    }
++                    if (!patch_errors.empty()) {
++                        std::ostringstream mod_error_stream;
++                        mod_error_stream << "Error preparing ROM patch mods:\n\n";
++                        for (const auto& cur_error : patch_errors) {
++                            auto mod_details = recomp::mods::get_details_for_mod(cur_error.mod_id);
++                            if (mod_details) {
++                                mod_error_stream << mod_details->display_name;
++                            }
++                            else {
++                                mod_error_stream << cur_error.mod_id;
++                            }
++                            mod_error_stream << ": " << recomp::mods::error_to_string(cur_error.error);
++                            if (!cur_error.error_param.empty()) {
++                                mod_error_stream << " (" << cur_error.error_param << ")";
++                            }
++                            mod_error_stream << "\n";
++                        }
++                        ultramodern::error_handling::message_box(mod_error_stream.str().c_str());
++                        game_status.store(GameStatus::None);
++                        game_status.notify_all();
++                        return false;
++                    }
++                }
++
+                 init(rdram, context, game_entry.entrypoint_address);
+                 if (game_entry.on_init_callback) {
+                     game_entry.on_init_callback(rdram, context);
+                 }
+@@ -972,12 +1055,31 @@ void recomp::start(const recomp::Configuration& cfg) {
  
          ultramodern::set_native_thread_name("Game Start Thread");
  
@@ -173,15 +208,15 @@ diff --git a/librecomp/src/mods.cpp b/librecomp/src/mods.cpp
 diff --git a/librecomp/include/librecomp/mods.hpp b/librecomp/include/librecomp/mods.hpp
 --- a/librecomp/include/librecomp/mods.hpp
 +++ b/librecomp/include/librecomp/mods.hpp
-@@ -354,6 +354,7 @@ namespace recomp {
+@@ -352,6 +352,7 @@ namespace recomp {
              Version get_mod_deprecation_version(const std::string& mod_id) const;
              size_t num_opened_mods();
              std::vector<ModLoadErrorDetails> load_mods(const GameEntry& game_entry, const std::string& game_mode_id, uint8_t* rdram, int32_t load_address, uint32_t& ram_used);
 +            std::vector<ModLoadErrorDetails> prepare_rom_patch(const GameEntry& game_entry, const std::string& game_mode_id);
              void unload_mods();
-             std::string get_mod_id_from_filename(const std::string& mod_id) const;
+             std::string get_mod_id_from_filename(const std::filesystem::path& mod_filename) const;
              std::filesystem::path get_mod_filename(const std::string& mod_id) const;
-@@ -420,6 +421,7 @@ namespace recomp {
+@@ -441,6 +442,7 @@ namespace recomp {
              size_t num_events = 0;
              ModContentTypeId code_content_type_id;
              ModContentTypeId rom_patch_content_type_id;
@@ -309,44 +344,3 @@ diff --git a/librecomp/src/mods.cpp b/librecomp/src/mods.cpp
  }
  
  void recomp::mods::unmet_dependency_handler(uint8_t* rdram, recomp_context* ctx, uintptr_t arg) {
-
-diff --git a/librecomp/src/recomp.cpp b/librecomp/src/recomp.cpp
---- a/librecomp/src/recomp.cpp
-+++ b/librecomp/src/recomp.cpp
-@@ -713,6 +713,36 @@ bool wait_for_game_started(uint8_t* rdram, recomp_context* context) {
-                 auto find_it = game_roms.find(current_game.value());
-                 const recomp::GameEntry& game_entry = find_it->second;
- 
-+                // ROM-patch mods (translations are a common example) must be
-+                // applied before init(): init performs the initial ROM DMA and
-+                // the game can cache pointer-table data during startup. Applying
-+                // patch.bps afterwards leaves those cached offsets pointing at
-+                // the unpatched ROM, so translated assets may never appear.
-+                if (!game_entry.mod_game_id.empty()) {
-+                    std::vector<recomp::mods::ModLoadErrorDetails> patch_errors;
-+                    {
-+                        std::lock_guard lock { mod_context_mutex };
-+                        patch_errors = mod_context->prepare_rom_patch(game_entry, current_game_mode_id);
-+                    }
-+                    if (!patch_errors.empty()) {
-+                        std::ostringstream mod_error_stream;
-+                        mod_error_stream << "Error preparing ROM patch mods:\n\n";
-+                        for (const auto& cur_error : patch_errors) {
-+                            auto mod_details = recomp::mods::get_details_for_mod(cur_error.mod_id);
-+                            mod_error_stream << (mod_details ? mod_details->display_name : cur_error.mod_id);
-+                            mod_error_stream << ": " << recomp::mods::error_to_string(cur_error.error);
-+                            if (!cur_error.error_param.empty()) {
-+                                mod_error_stream << " (" << cur_error.error_param << ")";
-+                            }
-+                            mod_error_stream << "\n";
-+                        }
-+                        ultramodern::error_handling::message_box(mod_error_stream.str().c_str());
-+                        game_status.store(GameStatus::None);
-+                        game_status.notify_all();
-+                        return false;
-+                    }
-+                }
-+
-                 init(rdram, context, game_entry.entrypoint_address);
-                 if (game_entry.on_init_callback) {
-                     game_entry.on_init_callback(rdram, context);
