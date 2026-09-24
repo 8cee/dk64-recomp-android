@@ -56,6 +56,8 @@ enum class Kind {
      * o resultado só libera o slot (ok=true quando o usuário retorna).
      */
     ModsFolder = 3,
+    SaveExport = 4, // exporta filesDir/saves/DK64.bin via ACTION_CREATE_DOCUMENT
+    SaveImport = 5, // importa DK64.bin via ACTION_OPEN_DOCUMENT
 };
 
 using Callback = std::function<void(bool ok, const std::string& payload)>;
@@ -88,7 +90,7 @@ void set_java_vm(void *vm);
 // Call sites compilam em desktop sem guards: tudo vira no-op/false.
 #include <cstdlib>
 namespace androidport::filedialog {
-enum class Kind { Rom = 0, DriverZip = 1, ModFile = 2, ModsFolder = 3 };
+enum class Kind { Rom = 0, DriverZip = 1, ModFile = 2, ModsFolder = 3, SaveExport = 4, SaveImport = 5 };
 using Callback = std::function<void(bool ok, const std::string& payload)>;
 inline bool request(Kind, Callback callback) {
     if (callback) callback(false, std::string{});
