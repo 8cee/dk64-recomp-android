@@ -138,7 +138,7 @@ void init_from_args(int argc, char** argv) {
     if (g_external.empty()) g_external = g_internal;
     ALOGI("paths: internal=%s external=%s", g_internal.c_str(), g_external.c_str());
 
-    // Renderer compatibility override (read by plume when the Vulkan device is
+    // r9 diagnostic: force the full RT64 renderer path on the stock/system GPU driver.\n    // This intentionally bypasses automatic Qualcomm legacy selection so the test\n    // isolates whether the remaining visual corruption is caused by that gate.\n    setenv("DK64_RENDERER_COMPAT", "full", 1);\n    ALOGI("r9 diagnostic: forcing DK64_RENDERER_COMPAT=full");\n\n    // Renderer compatibility override (read by plume when the Vulkan device is
     // created). A file named renderer_compat.txt containing "legacy" or "full" in
     // the app's internal or external files dir forces the corresponding path;
     // without it the renderer picks automatically (legacy only on Adreno 6xx
