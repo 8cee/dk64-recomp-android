@@ -187,7 +187,7 @@ bool init_jni(void* env_ptr, void* thiz_ptr) {
         s.method_on_game_started = env->GetStaticMethodID(
             global, "onGameStarted", "(Z)V");
         if (s.method_on_game_started == nullptr) {
-            VP_LOG("metodo VirtualPadView.onGameStarted(boolean) nao encontrado");
+            VP_LOG("VirtualPadView.onGameStarted(boolean) method not found");
             env->ExceptionClear();
         }
     }
