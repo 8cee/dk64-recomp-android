@@ -75,7 +75,7 @@ index 850689d..d30ada2 100644
      
      return recomp::RomValidationError::Good;
  }
-@@ -705,14 +744,58 @@ bool wait_for_game_started(uint8_t* rdram, recomp_context* context) {
+@@ -705,14 +744,57 @@ bool wait_for_game_started(uint8_t* rdram, recomp_context* context) {
          // TODO refactor this to allow a project to specify what entrypoint function to run for a give game.
          case GameStatus::Running:
              {
@@ -134,7 +134,7 @@ index 850689d..d30ada2 100644
                  if (game_entry.on_init_callback) {
                      game_entry.on_init_callback(rdram, context);
                  }
-@@ -972,12 +1055,31 @@ void recomp::start(const recomp::Configuration& cfg) {
+@@ -972,12 +1054,31 @@ void recomp::start(const recomp::Configuration& cfg) {
  
          ultramodern::set_native_thread_name("Game Start Thread");
  
