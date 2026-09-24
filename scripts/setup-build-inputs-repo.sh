@@ -28,8 +28,12 @@ set -euo pipefail
 GH_TOKEN="${GH_TOKEN:?Exporte GH_TOKEN=<PAT classic com escopo repo>}"
 ROM_ZIP="${ROM_ZIP:?Exporte ROM_ZIP=caminho/para/Donkey.Kong.64.zip (ou do .z64 direto)}"
 
+if [ -z "${PUBLIC_REPO:-}" ]; then
+    PUBLIC_REPO="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || true)"
+fi
 PUBLIC_REPO="${PUBLIC_REPO:-deivid22srk/dk64-recomp-android}"
-PRIVATE_REPO="${PRIVATE_REPO:-deivid22srk/dk64-recomp-build-inputs}"
+REPO_OWNER="${PUBLIC_REPO%%/*}"
+PRIVATE_REPO="${PRIVATE_REPO:-${REPO_OWNER}/dk64-recomp-build-inputs}"
 EXPECTED_SHA1="cf806ff2603640a748fca5026ded28802f1f4a50"   # DK64 NTSC-U 1.0 (comprimido)
 TAG="build-inputs"
 ASSET="Donkey.Kong.64.zip"

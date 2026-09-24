@@ -41,12 +41,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Init submódulos necessários (vcpkg não é usado no build Android)
+      - name: Init e verificar submódulos necessários
         run: |
           set -euo pipefail
           git submodule update --init --recursive --depth 1 \
             lib/rt64 lib/N64ModernRuntime lib/RecompFrontend lib/dk64_decomp lib/adrenotools
           git submodule status
+          EXPECTED_RT64=e437f2a5010b813cf5827b84fa249997ea910903
+          EXPECTED_RUNTIME=8fe786b52177d087821cf3affb85296f663b508d
+          [ "$(git -C lib/rt64 rev-parse HEAD)" = "$EXPECTED_RT64" ] || { echo "::error::RT64 pin incorreto"; exit 1; }
+          [ "$(git -C lib/N64ModernRuntime rev-parse HEAD)" = "$EXPECTED_RUNTIME" ] || { echo "::error::N64ModernRuntime pin incorreto"; exit 1; }
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
@@ -64,14 +68,17 @@ jobs:
       - name: Baixar ROM de input (release asset em repo privado) e validar
         env:
           GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          CONFIGURED_INPUT_REPO: ${{ vars.BUILD_INPUTS_REPO }}
         run: |
           set -euo pipefail
           if [ -z "${GH_TOKEN}" ]; then
-            echo "::error::Secret PRIVATE_REPO_TOKEN ausente — crie um PAT com acesso de leitura ao repo privado de inputs e defina o secret (ver scripts/setup-build-inputs-repo.sh)."
+            echo "::error::Secret PRIVATE_REPO_TOKEN ausente — rode scripts/setup-build-inputs-repo.sh no seu fork."
             exit 1
           fi
+          INPUT_REPO="${CONFIGURED_INPUT_REPO:-${GITHUB_REPOSITORY_OWNER}/dk64-recomp-build-inputs}"
+          echo "Build inputs: $INPUT_REPO"
           mkdir -p rom-input
-          gh release download build-inputs --repo deivid22srk/dk64-recomp-build-inputs \
+          gh release download build-inputs --repo "$INPUT_REPO" \
             --pattern 'Donkey.Kong.64.zip' --output rom-input/Donkey.Kong.64.zip --clobber
           cd rom-input
           unzip -o Donkey.Kong.64.zip
@@ -129,9 +136,15 @@ jobs:
       - name: Aplicar patches de port nos submódulos
         run: |
           set -euo pipefail
+          git -C lib/rt64 apply --check ../../android/patches/rt64-android.patch
+          git -C lib/rt64/src/contrib/plume apply --check ../../../../../android/patches/plume-android.patch
+          git -C lib/rt64/src/contrib/zstd apply --check ../../../../../android/patches/zstd-android.patch
+          git -C lib/N64ModernRuntime apply --check ../../android/patches/n64modernruntime-android.patch
+          git -C lib/RecompFrontend apply --check ../../android/patches/recompfrontend-android.patch
           git -C lib/rt64 apply --verbose ../../android/patches/rt64-android.patch
           git -C lib/rt64/src/contrib/plume apply --verbose ../../../../../android/patches/plume-android.patch
           git -C lib/rt64/src/contrib/zstd apply --verbose ../../../../../android/patches/zstd-android.patch
+          git -C lib/N64ModernRuntime apply --verbose ../../android/patches/n64modernruntime-android.patch
           git -C lib/RecompFrontend apply --verbose ../../android/patches/recompfrontend-android.patch
 
       - name: Verificar secret da keystore de release
@@ -182,6 +195,18 @@ jobs:
             fi
           done
           echo "APK OK: libmain.so + hooks do adrenotools presentes"
+
+          unzip -p "$APK" lib/arm64-v8a/libmain.so > /tmp/libmain.so
+          strings /tmp/libmain.so | grep -q 'renderer_compat.txt' || {
+            echo "::error::renderer_compat.txt ausente do libmain.so"; exit 1;
+          }
+          strings /tmp/libmain.so | grep -q 'DK64_RENDERER_COMPAT' || {
+            echo "::error::DK64_RENDERER_COMPAT ausente do libmain.so"; exit 1;
+          }
+          grep -Eq '"versionName"[[:space:]]*:[[:space:]]*"1\.0\.3-android-r8"' android/app/build/outputs/apk/release/output-metadata.json || {
+            echo "::error::versionName do APK não é 1.0.3-android-r8"; exit 1;
+          }
+          echo "Renderer r8 markers OK"
 
       - name: Verificar assinatura do APK (apksigner)
         run: |
