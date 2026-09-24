@@ -962,6 +962,21 @@ void on_launcher_init(recompui::LauncherMenu *menu) {
     game_options_menu->add_option("GPU Driver", []() {
         show_android_gpu_driver_menu();
     });
+    game_options_menu->add_option("Export Save", []() {
+        androidport::filedialog::request(androidport::filedialog::Kind::SaveExport,
+            [](bool ok, const std::string& payload) {
+                SDL_ShowSimpleMessageBox(ok ? SDL_MESSAGEBOX_INFORMATION : SDL_MESSAGEBOX_ERROR,
+                    "Export Save", payload.empty() ? (ok ? "Save exported." : "Export canceled.") : payload.c_str(), nullptr);
+            });
+    });
+    game_options_menu->add_option("Import Save", []() {
+        androidport::filedialog::request(androidport::filedialog::Kind::SaveImport,
+            [](bool ok, const std::string& payload) {
+                SDL_ShowSimpleMessageBox(ok ? SDL_MESSAGEBOX_INFORMATION : SDL_MESSAGEBOX_ERROR,
+                    "Import Save", payload.empty() ? (ok ? "Save imported." : "Import canceled.") : payload.c_str(), nullptr);
+                if (ok) request_app_restart_after_delay(800);
+            });
+    });
 #endif
     game_options_menu->set_width(30, recompui::Unit::Percent);
 
