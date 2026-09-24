@@ -110,6 +110,11 @@ public class MainActivity extends SDLActivity {
 
         super.onCreate(savedInstanceState);
 
+        // Initialize the Android platform HTTP bridge after libmain.so has been
+        // loaded by SDLActivity. The online mod store uses this for HTTPS while
+        // keeping certificate verification on Android's system trust store.
+        HttpBridge.init(getApplicationContext());
+
         // Injeta o nativeLibraryDir no nativo O QUANTO ANTES (libmain.so já
         // foi carregada por super.onCreate -> loadLibraries). Sem isto, o
         // hookLibDir do adrenotools (ApplicationInfo.nativeLibraryDir — valor
