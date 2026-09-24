@@ -137,3 +137,35 @@ index 850689d..d30ada2 100644
      }, window_handle, rdram};
  
      parse_cli(cfg.argc, cfg.argv);
+
+diff --git a/librecomp/src/mods.cpp b/librecomp/src/mods.cpp
+--- a/librecomp/src/mods.cpp
++++ b/librecomp/src/mods.cpp
+@@ -588,13 +588,27 @@ void patch_func(recomp_func_t* target_func, recomp::mods::GenericFunction replac
+ #else
+ #   error "Unsupported architecture"
+ #endif
+ 
++#if defined(__ANDROID__) && defined(IS_ARM64)
++    // ARM64 does not guarantee instruction-cache coherency after writing code.
++    // Android code mods patch these 16-byte trampolines at runtime, so flush
++    // the exact range before restoring executable permissions.
++    __builtin___clear_cache(reinterpret_cast<char*>(target_func_u8),
++                            reinterpret_cast<char*>(target_func_u8 + offset));
++#endif
++
+     protect(target_func_u8, old_flags);
+ }
+ 
+ void unpatch_func(void* target_func, const recomp::mods::PatchData& data) {
+     uint64_t old_flags;
+     unprotect(target_func, &old_flags);
+     memcpy(target_func, data.replaced_bytes.data(), data.replaced_bytes.size());
++#if defined(__ANDROID__) && defined(IS_ARM64)
++    // The same cache maintenance is required when restoring original code.
++    __builtin___clear_cache(reinterpret_cast<char*>(target_func),
++                            reinterpret_cast<char*>(target_func) + data.replaced_bytes.size());
++#endif
++
+     protect(target_func, old_flags);
+ }
