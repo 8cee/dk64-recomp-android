@@ -68,12 +68,22 @@ jobs:
           echo "Audited r8 source verified."
           git --no-pager log --oneline -8
 
+      - name: Restore workflow files for token-safe publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          # GitHub's Actions token cannot push commits that modify workflow files.
+          # Publish all audited source changes first; ChatGPT's GitHub App will
+          # write the final build/release workflows afterward.
+          git checkout origin/r8-full-fidelity -- .github/workflows/build.yml .github/workflows/release.yml
+
       - name: Remove bootstrap transport files
         shell: bash
         run: |
           set -euo pipefail
           git rm -r ci/r8-series .github/workflows/r8-bootstrap.yml
-          git commit -m "ci: remove r8 bootstrap transport files"
+          git add .github/workflows/build.yml .github/workflows/release.yml
+          git commit -m "ci: prepare clean r8 source branch"
 
       - name: Publish clean applied branch
         shell: bash
