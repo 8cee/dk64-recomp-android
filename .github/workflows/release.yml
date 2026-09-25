@@ -12,6 +12,9 @@ name: release
 # v<versionName>-r<run_number>.
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       release_tag:
@@ -33,6 +36,9 @@ permissions:
 
 jobs:
   release-apk:
+    # A merge commit titled "release: ..." publishes automatically. Manual
+    # workflow_dispatch remains available for rebuilds/recovery.
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, 'release:')
     runs-on: ubuntu-latest
     timeout-minutes: 150
     steps:
@@ -142,6 +148,13 @@ jobs:
           git -C lib/N64ModernRuntime apply --verbose ../../android/patches/n64modernruntime-android.patch
           git -C lib/RecompFrontend apply --verbose ../../android/patches/recompfrontend-android.patch
 
+          # r16 stable renderer/autoresolution follow-up patches depend on the
+          # base Android patches above, so validate/apply them afterwards.
+          git -C lib/rt64 apply --check ../../android/patches/rt64-r16-auto.patch
+          git -C lib/rt64/src/contrib/plume apply --check ../../../../../android/patches/plume-r16-swapchain.patch
+          git -C lib/rt64 apply --verbose ../../android/patches/rt64-r16-auto.patch
+          git -C lib/rt64/src/contrib/plume apply --verbose ../../../../../android/patches/plume-r16-swapchain.patch
+
       - name: Verificar secret da keystore de release
         run: |
           set -euo pipefail
@@ -198,10 +211,10 @@ jobs:
           strings /tmp/libmain.so | grep -q 'DK64_RENDERER_COMPAT' || {
             echo "::error::DK64_RENDERER_COMPAT ausente do libmain.so"; exit 1;
           }
-          grep -Eq '"versionName"[[:space:]]*:[[:space:]]*"1\.0\.3-android-r8"' android/app/build/outputs/apk/release/output-metadata.json || {
-            echo "::error::versionName do APK não é 1.0.3-android-r8"; exit 1;
+          grep -Eq '"versionName"[[:space:]]*:[[:space:]]*"1\.0\.3-android"' android/app/build/outputs/apk/release/output-metadata.json || {
+            echo "::error::versionName do APK não é 1.0.3-android"; exit 1;
           }
-          echo "Renderer r8 markers OK"
+          echo "Renderer stable markers OK"
 
       - name: Verificar assinatura do APK (apksigner)
         run: |
@@ -227,7 +240,7 @@ jobs:
           if [ -n "$INPUT_TAG" ]; then
             TAG="$INPUT_TAG"
           else
-            TAG="v${VERSION}-r${{ github.run_number }}"
+            TAG="v${VERSION}"
           fi
           APK_STEM="dk64recomp-android-${TAG}"
           echo "tag=${TAG}"       >> "$GITHUB_OUTPUT"
@@ -281,9 +294,17 @@ jobs:
             echo "- Keystore: CN=DK64 Recompiled Android (release)"
             echo "- SHA-256 do APK: \`${SHA256_SHORT}…\`"
             echo ""
-            echo "### Requisitos"
+            echo "### Highlights"
+            echo "- Native Android arm64-v8a build with RT64/Vulkan"
+            echo "- Online mod store + local NRM/RTZ mods, including code mods"
+            echo "- Save import/export"
+            echo "- Stable Android Auto resolution (2x safety cap)"
+            echo "- Modern Adreno full renderer path with legacy compatibility fallbacks"
+            echo "- Android surface/swapchain lifecycle handling"
+            echo ""
+            echo "### Requirements"
             echo "- Android 8.0+ (API 26), arm64-v8a"
-            echo "- ROM do Donkey Kong 64 (NTSC-U 1.0) — selecione no app na primeira execução"
+            echo "- Donkey Kong 64 NTSC-U 1.0 ROM — select it in the app on first launch"
           } > /tmp/release-notes.md
           gh release create "$TAG" "$APK#${{ steps.relmeta.outputs.apk_stem }}.apk" \
             --repo "$GITHUB_REPOSITORY" \

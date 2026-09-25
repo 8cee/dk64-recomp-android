@@ -1,6 +1,6 @@
 # DK64: Recompiled — Port Android
 
-[![build](https://github.com/deivid22srk/dk64-recomp-android/actions/workflows/build.yml/badge.svg)](https://github.com/deivid22srk/dk64-recomp-android/actions/workflows/build.yml)
+[![build](https://github.com/8cee/dk64-recomp-android/actions/workflows/build.yml/badge.svg)](https://github.com/8cee/dk64-recomp-android/actions/workflows/build.yml)
 
 Port do [Donkey Kong 64: Recompiled](https://github.com/Rainchus/Donkey-Kong-64-Recompiled)
 (Rainchus) para **Android nativo** via NDK, mantendo toda a stack original:
@@ -11,10 +11,20 @@ Port do [Donkey Kong 64: Recompiled](https://github.com/Rainchus/Donkey-Kong-64-
 > **Donkey Kong 64 (EUA, NTSC-U 1.0)** — sha1 `cf806ff2603640a748fca5026ded28802f1f4a50`.
 > Este projeto é um port de código aberto; nenhuma ROM é distribuída aqui.
 
+## Stable Android release
+
+Current stable version: **1.0.3-android** (versionCode 16).
+
+This baseline includes working code mods/Mod Store, save import/export, the
+full-fidelity renderer path on modern Adreno GPUs, Android RT64/Plume
+surface-lifecycle fixes, and stable Auto resolution with the tested 2x safety cap.
+
+Release notes: [docs/ANDROID-RELEASE-1.0.3.md](docs/ANDROID-RELEASE-1.0.3.md).
+
 ## APK pronto
 
 Cada push gera um APK automaticamente no GitHub Actions (workflow `build.yml`):
-**Actions → build → artefato `dk64recomp-android-debug`** (`app-debug.apk`).
+**Actions → build → artefato `dk64recomp-android-stable`** (APK release assinado). A versão estável também é publicada em **Releases**.
 
 ## Instalação no aparelho
 
@@ -38,8 +48,8 @@ Cada push gera um APK automaticamente no GitHub Actions (workflow `build.yml`):
 - Android 8.0+ (arm64-v8a)
 - **GPU com Vulkan 1.1+**
 - Gamepad Bluetooth/USB recomendado para jogar; touch navega os menus como mouse
-- O mod store *online* está desativado no Android v1 (mods locais `.nrm`/`.rtz` funcionam:
-  coloque-os em `Android/data/com.deivid22srk.dk64recomp/files/mods/`)
+- Mod Store online suportado pelo bridge HTTP nativo do port; mods locais `.nrm`/`.rtz` também funcionam.
+- Mods locais ficam em `Android/data/com.eightcee.dk64recomp/files/mods/`.
 
 ## Gamepad virtual (touch)
 
@@ -120,7 +130,11 @@ cmake -S lib/rt64/src/tools/file_to_c -B build-filetoc -G Ninja && cmake --build
 # 2) APK
 git -C lib/rt64 apply ../../android/patches/rt64-android.patch
 git -C lib/rt64/src/contrib/plume apply ../../../../../android/patches/plume-android.patch
+git -C lib/rt64/src/contrib/zstd apply ../../../../../android/patches/zstd-android.patch
+git -C lib/N64ModernRuntime apply ../../android/patches/n64modernruntime-android.patch
 git -C lib/RecompFrontend apply ../../android/patches/recompfrontend-android.patch
+git -C lib/rt64 apply ../../android/patches/rt64-r16-auto.patch
+git -C lib/rt64/src/contrib/plume apply ../../../../../android/patches/plume-r16-swapchain.patch
 cd android && ./gradlew assembleDebug -PHOST_FILE_TO_C="$PWD/../build-filetoc/file_to_c"
 ```
 
@@ -167,8 +181,7 @@ probe de validação): [docs/DRIVER-VULKAN.md](docs/DRIVER-VULKAN.md).
   despachado por frame no `draw_hook` (patch do `ui_state.cpp`), no mesmo
   contexto dos callbacks de menu. A tela Java de setup foi removida — o app
   abre direto no SDL e só copia assets na 1ª execução (`AppSetup`)
-- `nativefiledialog-extended` e `curl` substituídos por *stubs* no Android
-  (diálogo de ROM = SAF via DocumentsUI; mod store offline)
+- `nativefiledialog-extended` é adaptado ao SAF/DocumentsUI; `curl` usa o bridge HTTP Android (`HttpURLConnection`) para manter o Mod Store online.
 - Patches aplicados aos submódulos `rt64`/`RecompFrontend` via `git apply`
   (`android/patches/*.patch`) — submódulos permanecem upstream
 - Vulkan via volk (`VK_NO_PROTOTYPES`): driver do sistema ou Turnip
