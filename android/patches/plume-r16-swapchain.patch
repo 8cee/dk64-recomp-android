@@ -1,7 +1,7 @@
 diff --git a/plume_vulkan.cpp b/plume_vulkan.cpp
 --- a/plume_vulkan.cpp
 +++ b/plume_vulkan.cpp
-@@ -2321,9 +2321,25 @@ namespace plume {
+@@ -2321,11 +2321,27 @@ namespace plume {
          VkSurfaceCapabilitiesKHR surfaceCapabilities = {};
          vkGetPhysicalDeviceSurfaceCapabilitiesKHR(commandQueue->device->physicalDevice, surface, &surfaceCapabilities);
  
@@ -34,7 +34,7 @@ diff --git a/plume_vulkan.cpp b/plume_vulkan.cpp
  
          createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
          createInfo.surface = surface;
-@@ -2337,7 +2353,13 @@ namespace plume {
+@@ -2337,6 +2353,12 @@ namespace plume {
          createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
          createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
 -        createInfo.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
@@ -48,7 +48,7 @@ diff --git a/plume_vulkan.cpp b/plume_vulkan.cpp
          createInfo.compositeAlpha = pickedAlphaFlag;
          createInfo.presentMode = requiredPresentMode;
          createInfo.clipped = VK_TRUE;
-@@ -2373,6 +2395,12 @@ namespace plume {
+@@ -2373,5 +2395,11 @@ namespace plume {
  
          desc.textureCount = retrievedImageCount;
  
