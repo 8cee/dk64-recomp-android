@@ -1207,8 +1207,8 @@ class VirtualPadView @JvmOverloads constructor(
             }
             4 -> {
                 dpad.pointerId = pid
+                // updateDpad já gera um tick quando entra no primeiro setor.
                 updateDpad(x, y)
-                haptic(HapticFeedbackConstants.VIRTUAL_KEY)
             }
             else -> return false
         }
