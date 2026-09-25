@@ -1,0 +1,34 @@
+diff --git a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
+--- a/src/hle/rt64_workload_queue.cpp
++++ b/src/hle/rt64_workload_queue.cpp
+@@ -191,12 +191,24 @@ namespace RT64 {
+         case UserConfiguration::Resolution::WindowIntegerScale:
+             if (ext.sharedResources->swapChainHeight > 0) {
+ #if defined(__ANDROID__)
+                 // Android Auto resolution safety cap. Real-device testing showed that
+                 // higher integer scales still corrupt DK64 framebuffer effects on
+                 // mobile Vulkan, while Original 2x is clean. Keep Auto responsive to
+                 // very small surfaces, but never exceed the proven-safe 2x path.
++                const uint32_t safeReferenceHeight = (referenceHeight > 0) ? referenceHeight : 1;
++                const uint32_t integerScale = ext.sharedResources->swapChainHeight / safeReferenceHeight;
+                 resolutionMultiplier = std::clamp(
+-                    float(ext.sharedResources->swapChainHeight / referenceHeight),
++                    float(integerScale),
+                     1.0f, 2.0f);
++                static uint32_t lastAutoWidth = 0;
++                static uint32_t lastAutoHeight = 0;
++                static uint32_t lastReferenceHeight = 0;
++                if ((lastAutoWidth != ext.sharedResources->swapChainWidth) ||
++                    (lastAutoHeight != ext.sharedResources->swapChainHeight) ||
++                    (lastReferenceHeight != safeReferenceHeight)) {
++                    fprintf(stderr, "DK64DIAG RT64 Auto: surface=%ux%u referenceHeight=%u raw=%.3f integer=%u chosen=%.1fx cap=2.0x.\n",
++                        ext.sharedResources->swapChainWidth, ext.sharedResources->swapChainHeight,
++                        safeReferenceHeight, double(ext.sharedResources->swapChainHeight) / double(safeReferenceHeight),
++                        integerScale, double(resolutionMultiplier));
++                    lastAutoWidth = ext.sharedResources->swapChainWidth;
++                    lastAutoHeight = ext.sharedResources->swapChainHeight;
++                    lastReferenceHeight = safeReferenceHeight;
++                }
+ #else
+                 resolutionMultiplier = std::max(float((ext.sharedResources->swapChainHeight + referenceHeight - 1) / referenceHeight), 1.0f);
+ #endif
