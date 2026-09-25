@@ -73,8 +73,8 @@ Comportamento:
   usando o touch como mouse. Toques em áreas livres do HUD também passam para
   o jogo normalmente.
 - Botões A/B/C/START/L/R/Z/D-pad são repassados ao runtime como input N64
-  (mesma máscara de botões de um controle físico), então **todos os modos de
-  jogo, menus internos do DK64 e combinações funcionam igual**.
+  (mesma máscara de botões de um controle físico). O D-pad é **digital e separado
+  do analógico**, com D↑/D↓/D←/D→ e diagonais reais (duas direções simultâneas).
 - `A` aceita e `B` volta nas interfaces do port (launcher/menu de configuração);
   o analógico e o D-pad navegam; `☰` equivale ao botão Select/Back
   (abre e fecha o menu de configurações do port em jogo).
