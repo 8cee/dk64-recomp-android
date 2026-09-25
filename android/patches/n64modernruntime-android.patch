@@ -385,7 +385,7 @@ diff --git a/librecomp/src/mods.cpp b/librecomp/src/mods.cpp
 diff --git a/librecomp/src/mods.cpp b/librecomp/src/mods.cpp
 --- a/librecomp/src/mods.cpp
 +++ b/librecomp/src/mods.cpp
-@@ -228,25 +231,96 @@ private:
+@@ -228,24 +231,93 @@ private:
      uint32_t api_version;
  };
  
