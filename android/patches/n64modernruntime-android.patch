@@ -366,3 +366,130 @@ diff --git a/librecomp/src/mods.cpp b/librecomp/src/mods.cpp
 +        recompiler_output->code_size, is_good ? 1 : 0);
 +#endif
  }
+
+diff --git a/librecomp/src/mods.cpp b/librecomp/src/mods.cpp
+--- a/librecomp/src/mods.cpp
++++ b/librecomp/src/mods.cpp
+@@ -1,7 +1,10 @@
+ #include <span>
+ #include <fstream>
+ #include <sstream>
+ #include <functional>
++#include <cstdlib>
++#include <mutex>
++#include <unordered_set>
+ 
+ #include "librecomp/files.hpp"
+ #include "librecomp/mods.hpp"
+
+diff --git a/librecomp/src/mods.cpp b/librecomp/src/mods.cpp
+--- a/librecomp/src/mods.cpp
++++ b/librecomp/src/mods.cpp
+@@ -228,25 +231,96 @@ private:
+     uint32_t api_version;
+ };
+ 
++#if defined(__ANDROID__)
++// Android 16 can reject restoring execute permission on a modified file-backed
++// ELF text page (execmod policy). The old patcher ignored mprotect failures,
++// leaving the page RW/NX; the next call into a patched DK64 function then dies
++// with SEGV_ACCERR at the function entry. Shadow each touched code page with an
++// anonymous private copy first. Anonymous JIT-style pages can safely transition
++// RW -> RX without ever being writable+executable.
++static std::mutex android_patch_page_mutex;
++static std::unordered_set<uintptr_t> android_shadow_code_pages;
++
++[[noreturn]] static void android_patch_memory_fatal(const char* step, uintptr_t page) {
++    fprintf(stderr, "DK64MOD patch memory failure: %s page=%p\n",
++            step, reinterpret_cast<void*>(page));
++    std::abort();
++}
++
++static void android_shadow_code_page(uintptr_t page_start, size_t page_size) {
++    if (android_shadow_code_pages.contains(page_start)) {
++        if (mprotect(reinterpret_cast<void*>(page_start), page_size,
++                     PROT_READ | PROT_WRITE) != 0) {
++            android_patch_memory_fatal("mprotect RW", page_start);
++        }
++        return;
++    }
++
++    void* backup = mmap(nullptr, page_size, PROT_READ | PROT_WRITE,
++                        MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
++    if (backup == MAP_FAILED) {
++        android_patch_memory_fatal("backup mmap", page_start);
++    }
++    memcpy(backup, reinterpret_cast<void*>(page_start), page_size);
++
++    void* remapped = mmap(reinterpret_cast<void*>(page_start), page_size,
++                          PROT_READ | PROT_WRITE,
++                          MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
++    if (remapped == MAP_FAILED || remapped != reinterpret_cast<void*>(page_start)) {
++        munmap(backup, page_size);
++        android_patch_memory_fatal("shadow MAP_FIXED", page_start);
++    }
++
++    memcpy(remapped, backup, page_size);
++    munmap(backup, page_size);
++    android_shadow_code_pages.emplace(page_start);
++    fprintf(stderr, "DK64MOD shadowed patch page=%p bytes=%zu\n",
++            reinterpret_cast<void*>(page_start), page_size);
++}
++#endif
++
+ void unprotect(void* target_func, uint64_t* old_flags) {
+-    // Align the address to a page boundary.
+-    uintptr_t page_start = (uintptr_t)target_func;
+-    int page_size = getpagesize();
+-    page_start = (page_start / page_size) * page_size;
+-
+-    int result = mprotect((void*)page_start, page_size, PROT_READ | PROT_WRITE);
++    uintptr_t address = reinterpret_cast<uintptr_t>(target_func);
++    size_t page_size = static_cast<size_t>(getpagesize());
++    uintptr_t first_page = (address / page_size) * page_size;
++    uintptr_t last_page = ((address + 15) / page_size) * page_size;
+     *old_flags = 0;
+-    (void)result;
++
++#if defined(__ANDROID__)
++    std::lock_guard<std::mutex> lock(android_patch_page_mutex);
++    for (uintptr_t page = first_page;; page += page_size) {
++        android_shadow_code_page(page, page_size);
++        if (page == last_page) break;
++    }
++#else
++    for (uintptr_t page = first_page;; page += page_size) {
++        (void)mprotect(reinterpret_cast<void*>(page), page_size, PROT_READ | PROT_WRITE);
++        if (page == last_page) break;
++    }
++#endif
+ }
+ 
+ void protect(void* target_func, uint64_t old_flags) {
+-    // Align the address to a page boundary.
+-    uintptr_t page_start = (uintptr_t)target_func;
+-    int page_size = getpagesize();
+-    page_start = (page_start / page_size) * page_size;
+-
+-    int result = mprotect((void*)page_start, page_size, PROT_READ | PROT_EXEC);
+-    (void)result;
++    uintptr_t address = reinterpret_cast<uintptr_t>(target_func);
++    size_t page_size = static_cast<size_t>(getpagesize());
++    uintptr_t first_page = (address / page_size) * page_size;
++    uintptr_t last_page = ((address + 15) / page_size) * page_size;
++    (void)old_flags;
++
++    for (uintptr_t page = first_page;; page += page_size) {
++        int result = mprotect(reinterpret_cast<void*>(page), page_size,
++                              PROT_READ | PROT_EXEC);
++#if defined(__ANDROID__)
++        if (result != 0) {
++            android_patch_memory_fatal("mprotect RX", page);
++        }
++#else
++        (void)result;
++#endif
++        if (page == last_page) break;
++    }
+ }
+ #endif
