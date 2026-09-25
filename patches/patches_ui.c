@@ -121,8 +121,8 @@ RECOMP_PATCH Gfx * func_global_asm_80715E94(Struct80717D84* sprite, Gfx *dl, s16
     }
     temp_s0 = sprite->unk0[sprite->unk21++].unk0[D_global_asm_807444FC];
     // Mtx tag
-    cur_drawn_model_transform_id = MTXTAG_SPRITE;
-    cur_model_transform_id_offset = sprite->sprite_index;
+    cur_drawn_model_transform_id = sprite->sprite_index;
+    cur_model_transform_id_offset = 0;
     gSPMatrix(dl++, &identity_fixed_mtx, G_MTX_PUSH | G_MTX_MUL | G_MTX_MODELVIEW);
     cur_drawn_model_skip_interpolation = disable_sprite_interpolation;
     if (sprite->unk36F & ALIGN_NO_INTERP) {
