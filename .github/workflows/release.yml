@@ -2,18 +2,14 @@ name: release
 
 # Build do APK Android em modo RELEASE, assinado com a keystore de release
 # (secrets: ANDROID_RELEASE_KEYSTORE_B64 / _PASSWORD / _KEY_ALIAS / _KEY_PASSWORD),
-# publicado como GitHub Release com o APK anexado.
+# gera um APK assinado apenas como artifact de workflow (sem GitHub Release público).
 #
 # Baseado no build.yml (mesma cadeia: codegen no host com a ROM do release
 # `build-inputs` do repo privado via secret PRIVATE_REPO_TOKEN -> Gradle + NDK).
 #
-# Disparo: automático quando um merge/push em main começa com "release:",
-# ou manual via workflow_dispatch. Sem tag explícita, publica v<versionName>.
+# Disparo: somente manual via workflow_dispatch. Nenhum GitHub Release é publicado.
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       release_tag:
@@ -35,9 +31,6 @@ permissions:
 
 jobs:
   release-apk:
-    # A merge commit titled "release: ..." publishes automatically. Manual
-    # workflow_dispatch remains available for rebuilds/recovery.
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, 'release:')
     runs-on: ubuntu-latest
     timeout-minutes: 150
     steps:
@@ -261,54 +254,5 @@ jobs:
           path: android/app/build/outputs/apk/release/${{ steps.relmeta.outputs.apk_stem }}.apk
           if-no-files-found: error
 
-      - name: Criar GitHub Release com o APK assinado
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          TAG="${{ steps.relmeta.outputs.tag }}"
-          APK="android/app/build/outputs/apk/release/${{ steps.relmeta.outputs.apk_stem }}.apk"
-          SHA256=$(sha256sum "$APK" | cut -d' ' -f1)
-          SHA256_SHORT="${SHA256:0:16}"
-          PRE_FLAG=""
-          if [ "${{ github.event.inputs.prerelease }}" = "true" ]; then
-            PRE_FLAG="--prerelease"
-          fi
-          # Se a tag já existir de um run anterior, recria apontando p/ este commit
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $TAG já existe — removendo para recriar"
-            gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
-          fi
-          {
-            echo "## DK64 Recompiled — APK Android ${{ steps.relmeta.outputs.version }}"
-            echo ""
-            echo "APK **release assinado** (arm64-v8a), compilado pelo workflow \`${GITHUB_WORKFLOW}\` no commit \`${GITHUB_SHA::7}\` (\`${GITHUB_REF_NAME}\`)."
-            echo ""
-            echo "### Instalação"
-            echo "1. Baixe o arquivo \`${{ steps.relmeta.outputs.apk_stem }}.apk\` abaixo."
-            echo "2. No Android, permita \"instalar apps de fontes desconhecidas\" para o seu navegador/gerenciador de arquivos."
-            echo "3. Instale o APK. Não é preciso desinstalar builds anteriores assinados com esta mesma chave."
-            echo ""
-            echo "### Assinatura"
-            echo "- Keystore: CN=DK64 Recompiled Android (release)"
-            echo "- SHA-256 do APK: \`${SHA256_SHORT}…\`"
-            echo ""
-            echo "### Highlights"
-            echo "- Native Android arm64-v8a build with RT64/Vulkan"
-            echo "- Online mod store + local NRM/RTZ mods, including code mods"
-            echo "- Save import/export"
-            echo "- Stable Android Auto resolution (2x safety cap)"
-            echo "- Modern Adreno full renderer path with legacy compatibility fallbacks"
-            echo "- Android surface/swapchain lifecycle handling"
-            echo ""
-            echo "### Requirements"
-            echo "- Android 8.0+ (API 26), arm64-v8a"
-            echo "- Donkey Kong 64 NTSC-U 1.0 ROM — select it in the app on first launch"
-          } > /tmp/release-notes.md
-          gh release create "$TAG" "$APK#${{ steps.relmeta.outputs.apk_stem }}.apk" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "DK64 Recompiled Android ${{ steps.relmeta.outputs.version }} (${TAG})" \
-            --notes-file /tmp/release-notes.md \
-            $PRE_FLAG
-          echo "Release $TAG criado com o APK assinado"
+      # Public GitHub Release publication intentionally disabled.
+      # The signed APK remains available only as a workflow artifact.
