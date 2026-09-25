@@ -28,7 +28,7 @@ Cada push gera um APK automaticamente no GitHub Actions (workflow `build.yml`):
 
 ## Instalação no aparelho
 
-1. Instale o `app-debug.apk` (habilite "Instalar apps desconhecidos").
+1. Instale o APK da release/artefato `dk64recomp-android-stable` (habilite "Instalar apps desconhecidos").
 2. Abra o app — ele vai direto para o **menu do jogo** (a tela Java de setup foi
    desativada). Na primeira execução os assets da UI são extraídos sozinhos.
 3. Se ainda não houver ROM, a primeira opção do menu é **“Load ROM”**: toque,
@@ -89,7 +89,7 @@ O build tem duas fases (ambas automatizadas no CI):
    `PRIVATE_REPO_TOKEN`), descomprime com o script do [decomp do DK64](https://gitlab.com/dk64_decomp/dk64),
    compila [N64Recomp](https://github.com/N64Recomp/N64Recomp)/`RSPRecomp` e roda
    `us.toml`, `n_aspMain.toml` e `patches.toml`; além do `file_to_c` (host).
-2. **APK via Gradle+NDK** — `android/gradlew assembleDebug` com `externalNativeBuild`
+2. **APK via Gradle+NDK** — `android/gradlew assembleRelease` no CI (ou `assembleDebug` localmente) com `externalNativeBuild`
    (CMake orquestrado em `android/app/CMakeLists.txt`).
 
 Detalhes completos: [DESIGN.md](DESIGN.md) · README original do upstream: [README-UPSTREAM.md](README-UPSTREAM.md)
