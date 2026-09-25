@@ -40,6 +40,8 @@ private const val PRESS_IN_MS = 90f           // animação de pressionar
 private const val PRESS_OUT_MS = 140f         // animação de soltar
 private const val HUD_FADE_MS = 200f          // fade do HUD ao mostrar/esconder
 private const val KNOB_RETURN_TAU = 60f       // constante de tempo do retorno do knob
+private const val DPAD_AXIS_THRESHOLD = 0.38f  // setor angular: cardinais + diagonais
+private const val DPAD_CENTER_DEADZONE = 0.24f // centro neutro do D-pad
 
 // Paleta base do vidro (RGB puro; o alpha é aplicado por paint e escalado pelo
 // fade do HUD — nada de alpha "assado" na cor, evita dupla transformação).
@@ -83,8 +85,8 @@ private val GLOW_STOPS = floatArrayOf(0.5f, 0.86f, 1f)
  * saída (deslizar o dedo para fora solta o botão, mata "ghost press"), stick
  * com zona morta reescalada e retorno animado do knob, haptics diferenciados
  * (press × mudança de setor) e [requestUnbufferedDispatch] para menor latência
- * de toque. O D-pad não tem controle na tela: o jogo não o usa (todo o
- * movimento é pelo analógico) e a base esquerda do HUD fica mais limpa.
+ * de toque. O D-pad físico do N64 é um controle separado do analógico: envia
+ * D↑/D↓/D←/D→ diretamente e aceita diagonais com um único dedo.
  *
  * Integração nativa (CONTRATO — não mudar nomes/ids):
  *  - `nativeInit/nativeButton/nativeAxis/nativeIsGameStarted` vinculam por
@@ -98,7 +100,7 @@ private val GLOW_STOPS = floatArrayOf(0.5f, 0.86f, 1f)
  *
  * Layout (frações da ÁREA ÚTIL, referência paisagem):
  *  - Topo:      Z (esq, pose do indicador esquerdo do N64) · L (centro) · R (dir)
- *  - Esquerda:  analógico (12%, 63%)
+ *  - Esquerda:  analógico (12%, 63%) · D-pad (30%, 82%)
  *  - Base:      START (47.5%, 87%)
  *  - Direita:   losango C (76%, 42%) · A (88%, 58%) · B (79%, 72%) · MENU (65.5%, 88%)
  *  - Quina inf. dir.: botão de mostrar/esconder o HUD (94%, 89%)
@@ -123,9 +125,8 @@ class VirtualPadView @JvmOverloads constructor(
         const val BTN_C_DOWN = 7
         const val BTN_C_LEFT = 8
         const val BTN_C_RIGHT = 9
-        // D-pad (10..13): existe no contrato nativo (o enum do virtual_pad lê
-        // esses bits), mas não tem controle na tela — removido por não ser
-        // usado no DK64; os ids são mantidos para casar com o enum nativo.
+        // D-pad físico do N64. Estes ids chegam diretamente aos bits N64
+        // 0x0800/0x0400/0x0200/0x0100 no bridge nativo.
         const val BTN_DPAD_UP = 10
         const val BTN_DPAD_DOWN = 11
         const val BTN_DPAD_LEFT = 12
@@ -265,6 +266,59 @@ class VirtualPadView @JvmOverloads constructor(
         }
     }
 
+    /** D-pad digital N64: cruz visual + setores de toque com diagonais. */
+    private class DPadControl {
+        var cx = 0f
+        var cy = 0f
+        var outerR = 0f
+        var armHalf = 0f
+        var hitR = 0f
+        var pointerId = -1
+        var pressedMask = 0
+        var press = 0f
+        var glass: Shader? = null
+        var shadow: Shader? = null
+        val shape = Path()
+        val active: Boolean get() = pointerId != -1
+
+        fun layout(cx: Float, cy: Float, outerR: Float, armHalf: Float, unit: Float) {
+            this.cx = cx
+            this.cy = cy
+            this.outerR = outerR
+            this.armHalf = armHalf
+            hitR = max(outerR * 1.22f, MIN_HIT_UNIT * unit)
+
+            val l = cx - outerR
+            val r = cx + outerR
+            val t = cy - outerR
+            val b = cy + outerR
+            val x0 = cx - armHalf
+            val x1 = cx + armHalf
+            val y0 = cy - armHalf
+            val y1 = cy + armHalf
+            shape.reset()
+            shape.moveTo(x0, t)
+            shape.lineTo(x1, t)
+            shape.lineTo(x1, y0)
+            shape.lineTo(r, y0)
+            shape.lineTo(r, y1)
+            shape.lineTo(x1, y1)
+            shape.lineTo(x1, b)
+            shape.lineTo(x0, b)
+            shape.lineTo(x0, y1)
+            shape.lineTo(l, y1)
+            shape.lineTo(l, y0)
+            shape.lineTo(x0, y0)
+            shape.close()
+        }
+
+        fun hit(x: Float, y: Float): Boolean {
+            val dx = x - cx
+            val dy = y - cy
+            return dx * dx + dy * dy <= hitR * hitR
+        }
+    }
+
     private val btnA = RoundControl(BTN_A, "A", TINT_A, TINT_A)
     private val btnB = RoundControl(BTN_B, "B", TINT_B, TINT_B)
     private val btnCU = RoundControl(BTN_C_UP, "", TINT_C, TINT_C, drawArrow = true, arrowAngleDeg = -90f)
@@ -283,6 +337,7 @@ class VirtualPadView @JvmOverloads constructor(
     private val pills: Array<PillControl> = arrayOf(pillL, pillZ, pillR)
 
     private val stick = StickControl()
+    private val dpad = DPadControl()
 
     // ---------------------------------------------------------------- paints
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
@@ -448,6 +503,10 @@ class VirtualPadView @JvmOverloads constructor(
         // ---- analógico (esquerda)
         stick.layout(fx(0.12f), fy(0.63f), 96f * unit, 47f * unit)
 
+        // ---- D-pad digital N64, separado do analógico. A área circular de
+        // toque inclui os cantos da cruz para permitir diagonais confortáveis.
+        dpad.layout(fx(0.30f), fy(0.82f), 72f * unit, 27f * unit, unit)
+
         // ---- START (base central) e MENU (dentro do arco do polegar direito)
         btnStart.layout(fx(0.475f), fy(0.87f), 34f * unit, unit)
         btnMenu.layout(fx(0.655f), fy(0.88f), 30f * unit, unit)
@@ -508,6 +567,11 @@ class VirtualPadView @JvmOverloads constructor(
             Shader.TileMode.CLAMP)
         stick.knobGrad = RadialGradient(stick.cx, stick.cy, stick.knobR,
             intArrayOf(HILITE_TOP, HILITE_BOT), TWO_STOPS, Shader.TileMode.CLAMP)
+        dpad.glass = LinearGradient(dpad.cx, dpad.cy - dpad.outerR,
+            dpad.cx, dpad.cy + dpad.outerR,
+            intArrayOf(HILITE_TOP, HILITE_BOT), TWO_STOPS, Shader.TileMode.CLAMP)
+        dpad.shadow = RadialGradient(dpad.cx, dpad.cy, dpad.outerR * 1.48f,
+            intArrayOf(SHADOW_COLOR, Color.TRANSPARENT), SHADOW_STOPS, Shader.TileMode.CLAMP)
     }
 
     // ---------------------------------------------------------------- desenho
@@ -528,6 +592,7 @@ class VirtualPadView @JvmOverloads constructor(
             canvas.translate(0f, (1f - hudAlpha) * 24f * unit)
             for (p in pills) drawPill(canvas, p)
             drawStick(canvas)
+            drawDpad(canvas)
             for (b in roundButtons) drawRound(canvas, b)
             canvas.restore()
         }
@@ -766,6 +831,78 @@ class VirtualPadView @JvmOverloads constructor(
         strokePaint.alpha = 255
     }
 
+    /** D-pad N64 em cruz. Cada direção acende separadamente; diagonais acendem duas. */
+    private fun drawDpad(canvas: Canvas) {
+        val d = dpad
+        val hud = hudAlpha
+        val e = ease(d.press)
+        val scale = 1f - 0.035f * e
+
+        canvas.save()
+        canvas.scale(scale, scale, d.cx, d.cy)
+
+        if (d.shadow != null) {
+            fillPaint.shader = d.shadow
+            fillPaint.alpha = (255 * hud).toInt()
+            canvas.drawCircle(d.cx, d.cy, d.outerR * 1.48f, fillPaint)
+            fillPaint.shader = null
+        }
+
+        fillPaint.shader = null
+        fillPaint.color = GLASS_RGB
+        fillPaint.alpha = (GLASS_ALPHA * hud).toInt()
+        canvas.drawPath(d.shape, fillPaint)
+        if (d.glass != null) {
+            fillPaint.shader = d.glass
+            fillPaint.alpha = (255 * hud).toInt()
+            canvas.drawPath(d.shape, fillPaint)
+            fillPaint.shader = null
+        }
+
+        strokePaint.strokeWidth = 2.5f * unit
+        strokePaint.strokeJoin = Paint.Join.ROUND
+        strokePaint.color = lerpColor(TINT_NEUTRAL, ACCENT, e)
+        strokePaint.alpha = ((BORDER_ALPHA + (255 - BORDER_ALPHA) * e) * hud).toInt()
+        canvas.drawPath(d.shape, strokePaint)
+
+        val arrowOffset = d.outerR * 0.58f
+        val arrowSize = d.armHalf * 0.58f
+        drawDpadArrow(canvas, d.cx, d.cy - arrowOffset, arrowSize, -90f,
+            (d.pressedMask and 1) != 0, hud)
+        drawDpadArrow(canvas, d.cx, d.cy + arrowOffset, arrowSize, 90f,
+            (d.pressedMask and 2) != 0, hud)
+        drawDpadArrow(canvas, d.cx - arrowOffset, d.cy, arrowSize, 180f,
+            (d.pressedMask and 4) != 0, hud)
+        drawDpadArrow(canvas, d.cx + arrowOffset, d.cy, arrowSize, 0f,
+            (d.pressedMask and 8) != 0, hud)
+
+        // pequeno ponto central ajuda a leitura sem parecer um segundo analógico
+        fillPaint.shader = null
+        fillPaint.color = TINT_NEUTRAL
+        fillPaint.alpha = (110 * hud).toInt()
+        canvas.drawCircle(d.cx, d.cy, 4.5f * unit, fillPaint)
+
+        canvas.restore()
+        fillPaint.alpha = 255
+        strokePaint.alpha = 255
+    }
+
+    private fun drawDpadArrow(
+        canvas: Canvas, x: Float, y: Float, size: Float, angleDeg: Float,
+        pressed: Boolean, hud: Float
+    ) {
+        if (pressed) {
+            fillPaint.shader = null
+            fillPaint.color = ACCENT
+            fillPaint.alpha = (72 * hud).toInt()
+            canvas.drawCircle(x, y, dpad.armHalf * 0.86f, fillPaint)
+        }
+        fillPaint.shader = null
+        fillPaint.color = if (pressed) Color.WHITE else TINT_NEUTRAL
+        fillPaint.alpha = ((if (pressed) 255 else LABEL_ALPHA) * hud).toInt()
+        drawArrow(canvas, x, y, size, angleDeg)
+    }
+
     /** Botão de mostrar/esconder o HUD — sempre presente com o jogo rodando. */
     private fun drawToggle(canvas: Canvas) {
         val hud = hudAlpha
@@ -871,6 +1008,10 @@ class VirtualPadView @JvmOverloads constructor(
             if (next != stick.press) { stick.press = next; animating = true }
         }
         run {
+            val next = stepPress(dpad.press, if (dpad.active) 1f else 0f, dt)
+            if (next != dpad.press) { dpad.press = next; animating = true }
+        }
+        run {
             val next = stepPress(togglePress, if (togglePointerId != -1) 1f else 0f, dt)
             if (next != togglePress) { togglePress = next; animating = true }
         }
@@ -963,6 +1104,12 @@ class VirtualPadView @JvmOverloads constructor(
                             updateStick(x, y)
                             dirty = true
                         }
+                        dpad.pointerId == pid -> {
+                            // D-pad acompanha o setor sob o dedo e pode trocar
+                            // cardinal↔diagonal sem soltar o toque.
+                            updateDpad(x, y)
+                            dirty = true
+                        }
                         else -> {
                             // Botões: histerese de saída mata "ghost press".
                             for (b in roundButtons) {
@@ -1023,6 +1170,10 @@ class VirtualPadView @JvmOverloads constructor(
             val d = dist2(x, y, stick.cx, stick.cy)
             if (d < bestDist) { bestDist = d; bestKind = 1 }
         }
+        if (!dpad.active && dpad.hit(x, y)) {
+            val d = dist2(x, y, dpad.cx, dpad.cy)
+            if (d < bestDist) { bestDist = d; bestKind = 4 }
+        }
         for (b in roundButtons) {
             if (!b.pressed && b.hit(x, y)) {
                 val d = dist2(x, y, b.cx, b.cy)
@@ -1054,6 +1205,11 @@ class VirtualPadView @JvmOverloads constructor(
                 nativeButton(p.id, true)
                 haptic(HapticFeedbackConstants.VIRTUAL_KEY)
             }
+            4 -> {
+                dpad.pointerId = pid
+                updateDpad(x, y)
+                haptic(HapticFeedbackConstants.VIRTUAL_KEY)
+            }
             else -> return false
         }
         return true
@@ -1078,6 +1234,11 @@ class VirtualPadView @JvmOverloads constructor(
             stick.sentY = 0f
             lastStickTick = -1
             if (wasMoving) nativeAxis(0f, 0f) // evita release duplicado
+            return
+        }
+        if (dpad.pointerId == pid) {
+            dpad.pointerId = -1
+            setDpadMask(0)
             return
         }
         for (b in roundButtons) {
@@ -1105,6 +1266,8 @@ class VirtualPadView @JvmOverloads constructor(
             if (p.pressed) nativeButton(p.id, false)
         }
         if (stick.sentX != 0f || stick.sentY != 0f) nativeAxis(0f, 0f)
+        if (dpad.pressedMask != 0) setDpadMask(0)
+        dpad.pointerId = -1
         stick.pointerId = -1
         stick.dx = 0f
         stick.dy = 0f
@@ -1114,6 +1277,45 @@ class VirtualPadView @JvmOverloads constructor(
         for (b in roundButtons) b.pointerId = -1
         for (p in pills) p.pointerId = -1
         togglePointerId = -1
+    }
+
+    /**
+     * Converte a posição do dedo em D-pad digital. O centro é neutro; fora
+     * dele os eixos são avaliados por setor angular, permitindo diagonais
+     * reais (ex.: D↑+D←) sem transformar o D-pad em um segundo analógico.
+     */
+    private fun updateDpad(x: Float, y: Float) {
+        val d = dpad
+        if (d.outerR <= 0f) return
+        val dx = x - d.cx
+        val dy = y - d.cy
+        val mag = hypot(dx, dy)
+        if (mag <= d.outerR * DPAD_CENTER_DEADZONE) {
+            setDpadMask(0)
+            return
+        }
+
+        val nx = dx / mag
+        val ny = dy / mag
+        var mask = 0
+        if (ny < -DPAD_AXIS_THRESHOLD) mask = mask or 1
+        if (ny > DPAD_AXIS_THRESHOLD) mask = mask or 2
+        if (nx < -DPAD_AXIS_THRESHOLD) mask = mask or 4
+        if (nx > DPAD_AXIS_THRESHOLD) mask = mask or 8
+        setDpadMask(mask)
+    }
+
+    /** Publica somente as direções que realmente mudaram (sem eventos duplicados). */
+    private fun setDpadMask(newMask: Int) {
+        val oldMask = dpad.pressedMask
+        if (oldMask == newMask) return
+        val changed = oldMask xor newMask
+        if ((changed and 1) != 0) nativeButton(BTN_DPAD_UP, (newMask and 1) != 0)
+        if ((changed and 2) != 0) nativeButton(BTN_DPAD_DOWN, (newMask and 2) != 0)
+        if ((changed and 4) != 0) nativeButton(BTN_DPAD_LEFT, (newMask and 4) != 0)
+        if ((changed and 8) != 0) nativeButton(BTN_DPAD_RIGHT, (newMask and 8) != 0)
+        dpad.pressedMask = newMask
+        if (newMask != 0) haptic(HapticFeedbackConstants.CLOCK_TICK)
     }
 
     /**
