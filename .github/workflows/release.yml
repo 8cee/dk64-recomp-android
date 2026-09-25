@@ -7,9 +7,8 @@ name: release
 # Baseado no build.yml (mesma cadeia: codegen no host com a ROM do release
 # `build-inputs` do repo privado via secret PRIVATE_REPO_TOKEN -> Gradle + NDK).
 #
-# Disparo: manual (workflow_dispatch), opcionalmente com a tag do release.
-# Se `release_tag` ficar vazio, a tag é gerada automaticamente como
-# v<versionName>-r<run_number>.
+# Disparo: automático quando um merge/push em main começa com "release:",
+# ou manual via workflow_dispatch. Sem tag explícita, publica v<versionName>.
 
 on:
   push:
@@ -18,7 +17,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Tag do release (vazio = auto: v<versionName>-r<run_number>)'
+        description: 'Tag do release (vazio = auto: v<versionName>)'
         required: false
         default: ''
       prerelease:
@@ -242,7 +241,7 @@ jobs:
           else
             TAG="v${VERSION}"
           fi
-          APK_STEM="dk64recomp-android-${TAG}"
+          APK_STEM="DK64-Recompiled-Android-${VERSION}"
           echo "tag=${TAG}"       >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "apk_stem=${APK_STEM}" >> "$GITHUB_OUTPUT"
