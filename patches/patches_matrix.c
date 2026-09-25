@@ -444,7 +444,7 @@ RECOMP_PATCH Struct80717D84 *func_global_asm_80714B84(void *sprite, f32 scale, s
 
     func_global_asm_806335B0(arg2, 1, boneIndex, &x, &y, &z);
     sp = func_global_asm_80714D08(sprite, scale, x, y, z, NULL, arg2, boneIndex, arg4);
-    sp->sprite_index = current_sprite_id & 0xFFF;
+    sp->sprite_index = MTXTAG_SPRITE + current_sprite_id;
     current_sprite_id++;
     return sp;
 }
@@ -458,7 +458,7 @@ RECOMP_PATCH Struct80717D84 *func_global_asm_80714C08(void *sprite, f32 scale, A
         func_global_asm_80714A38(0x40);
     }
     sp = func_global_asm_80714D08(sprite, scale, x, y, z, actor, 0, boneIndex, arg4);
-    sp->sprite_index = current_sprite_id & 0xFFF;
+    sp->sprite_index = MTXTAG_SPRITE + current_sprite_id;
     current_sprite_id++;
     return sp;
 }
@@ -466,7 +466,7 @@ RECOMP_PATCH Struct80717D84 *func_global_asm_80714C08(void *sprite, f32 scale, A
 RECOMP_PATCH Struct80717D84 *drawSpriteAtPosition(void* sprite, f32 scale, f32 x, f32 y, f32 z) {
     Struct80717D84 *sp;
     sp = func_global_asm_80714D08(sprite, scale, x, y, z, NULL, 0, 0, 0);
-    sp->sprite_index = current_sprite_id & 0xFFF;
+    sp->sprite_index = MTXTAG_SPRITE + current_sprite_id;
     current_sprite_id++;
     return sp;
 }
