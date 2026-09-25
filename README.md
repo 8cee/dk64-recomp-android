@@ -11,20 +11,20 @@ Port do [Donkey Kong 64: Recompiled](https://github.com/Rainchus/Donkey-Kong-64-
 > **Donkey Kong 64 (EUA, NTSC-U 1.0)** — sha1 `cf806ff2603640a748fca5026ded28802f1f4a50`.
 > Este projeto é um port de código aberto; nenhuma ROM é distribuída aqui.
 
-## Stable Android release
+## Private stable Android baseline
 
-Current stable version: **1.0.3-android** (versionCode 16).
+Current private stable baseline: **1.0.3-android** (versionCode 16).
 
 This baseline includes working code mods/Mod Store, save import/export, the
 full-fidelity renderer path on modern Adreno GPUs, Android RT64/Plume
 surface-lifecycle fixes, and stable Auto resolution with the tested 2x safety cap.
 
-Release notes: [docs/ANDROID-RELEASE-1.0.3.md](docs/ANDROID-RELEASE-1.0.3.md).
+Private baseline notes: [docs/ANDROID-RELEASE-1.0.3.md](docs/ANDROID-RELEASE-1.0.3.md).
 
 ## APK pronto
 
 Cada push gera um APK automaticamente no GitHub Actions (workflow `build.yml`):
-**Actions → build → artefato `dk64recomp-android-stable`** (APK release assinado). A versão estável também é publicada em **Releases**.
+**Actions → build → artefato `dk64recomp-android-stable`** (APK assinado). No public GitHub Release is published.
 
 ## Instalação no aparelho
 
